@@ -1,5 +1,6 @@
 use ndarray::{s, Array2};
 use rand::Rng;
+use std::io;
 use terminal_size::{terminal_size, Height, Width};
 use termion::{color, style};
 
@@ -11,7 +12,7 @@ enum DrawChar {
 }
 
 trait Drawable {
-    fn get_draw_data(&self) -> Array2<DrawChar>;
+    fn get_draw_data(&self) -> &Array2<DrawChar>;
 }
 
 #[derive(Clone)]
@@ -21,12 +22,14 @@ enum FieldCell {
 }
 
 struct Field {
+    sprite: Option<Array2<DrawChar>>,
     data: Array2<FieldCell>,
 }
 
 impl Field {
     fn new(width: usize, height: usize) -> Field {
         Field {
+            sprite: None,
             data: Array2::from_elem((height, width), FieldCell::Empty),
         }
     }
@@ -35,6 +38,7 @@ impl Field {
         let mut field = Field::new(width, height);
 
         field.fill_rand(k);
+        field.set_bounds();
 
         for _ in 0..smooth {
             field.smooth();
@@ -117,27 +121,63 @@ impl Field {
         let (h, w) = self.data.dim();
         for x in 0..w {
             self.data[[0, x]] = FieldCell::Wall;
-            self.data[[h-1, x]] = FieldCell::Wall;
+            self.data[[h - 1, x]] = FieldCell::Wall;
         }
-        for y in 1..h-1 {
+        for y in 1..h - 1 {
             self.data[[y, 0]] = FieldCell::Wall;
             self.data[[y, w - 1]] = FieldCell::Wall;
         }
     }
+
+    fn render_all(&mut self) {
+        self.sprite = Some(self.data.map(|x| match x {
+            FieldCell::Empty => DrawChar::Char('.'),
+            FieldCell::Wall => DrawChar::CharColored('█', color::Rgb(0x88, 0x66, 0x88)),
+        }));
+    }
+
+    fn render_with_light(&mut self, source: (i32, i32), distance: usize) {
+        let (h, w) = self.data.dim();
+        let mut sprite = Array2::from_elem((h, w), DrawChar::Empty);
+
+        if source.0 >= 0 && source.1 >= 0 && source.0 < w as i32 && source.1 < h as i32 {
+            let mut open = vec![(source.0 as usize, source.1 as usize, 0)];
+
+            while open.len() > 0 {
+                let (p_x, p_y, w) = open.remove(0);
+
+                if w > distance {
+                    continue;
+                }
+
+                if let Some(DrawChar::Empty) = sprite.get([p_y, p_x]) {
+                    if let Some(FieldCell::Empty) = self.data.get([p_y, p_x]) {
+                        sprite[[p_y, p_x]] = DrawChar::Char('.');
+                        open.push((p_x + 1, p_y + 0, w + 1));
+                        open.push((p_x + 0, p_y + 1, w + 1));
+                        open.push((p_x - 1, p_y - 0, w + 1));
+                        open.push((p_x - 0, p_y - 1, w + 1));
+                    }
+                    if let Some(FieldCell::Wall) = self.data.get([p_y, p_x]) {
+                        sprite[[p_y, p_x]] =
+                            DrawChar::CharColored('█', color::Rgb(0x88, 0x66, 0x88));
+                    }
+                }
+            }
+        }
+        self.sprite = Some(sprite);
+    }
 }
 
 impl Drawable for Field {
-    fn get_draw_data(&self) -> Array2<DrawChar> {
-        self.data.map(|x| match x {
-            FieldCell::Empty => DrawChar::Char('.'),
-            FieldCell::Wall => DrawChar::Char('█'),
-        })
+    fn get_draw_data(&self) -> &Array2<DrawChar> {
+        self.sprite.as_ref().expect("Not rendered field")
     }
 }
 
 fn draw_colored<D: Drawable>(
     dest: &mut Array2<DrawChar>,
-    src: D,
+    src: &D,
     pos: (usize, usize),
     color: color::Rgb,
 ) {
@@ -153,7 +193,7 @@ fn draw_colored<D: Drawable>(
     }
 }
 
-fn draw<D: Drawable>(dest: &mut Array2<DrawChar>, src: D, pos: (usize, usize)) {
+fn draw<D: Drawable>(dest: &mut Array2<DrawChar>, src: &D, pos: (usize, usize)) {
     for (p, v) in src.get_draw_data().indexed_iter() {
         let x = p.1 + pos.0;
         let y = p.0 + pos.1;
@@ -176,56 +216,73 @@ fn main() {
 
     let field_width = 20;
     let field_height = 10;
-    let mut field = Field::rand_cave(field_width, field_height, 0.6, 2);
-    field.set_bounds();
+    let mut field = Field::rand_cave(field_width, field_height, 0.66, 3);
 
     let field_width = field_width * 2;
     field.stretch(2, 1);
 
+    field.render_all();
+
     let f_x = (screen_width - field_width) / 2;
     let f_y = (screen_height - field_height) / 2;
 
-    draw_colored(&mut screen, field, (f_x, f_y), color::Rgb(0x88, 0x66, 0x88));
+    draw(&mut screen, &field, (f_x, f_y));
+
+    let reset = style::Reset;
 
     for row in screen.genrows() {
         for c in row {
             match c {
                 DrawChar::Char(c) => {
                     print!("{}", c);
-                },
+                }
                 DrawChar::CharColored(c, color) => {
-                    print!("{}{}{}", color::Fg(*color), c, style::Reset);
-                },
-                _ => print!(" "),
+                    print!("{}{}{}", color::Fg(*color), c, reset);
+                }
+                _ => {
+                    print!(" ");
+                }
             }
         }
         print!("\n");
     }
 
-    //
-    // let field: Vec<Vec<i32>> = smooth(smooth(field));
-    //
-    // let wall = format!(
-    //     "{}██{}",
-    //     color::Fg(color::Rgb(0x88, 0x66, 0x88)),
-    //     style::Reset
-    // );
-    // let space = format!(
-    //     "{}  {}",
-    //     color::Bg(color::Rgb(0x11, 0x00, 0x11)),
-    //     style::Reset
-    // );
-    //
-    // for row in field.iter() {
-    //     for v in row.iter() {
-    //         print!(
-    //             "{}",
-    //             match v {
-    //                 1 => &wall,
-    //                 _ => &space,
-    //             }
-    //         )
-    //     }
-    //     print!("\n");
-    // }
+    let mut user_input = String::new();
+
+    io::stdin()
+        .read_line(&mut user_input)
+        .expect("Failed to read line");
+
+    let user_input: Vec<i32> = user_input
+        .trim()
+        .split_whitespace()
+        .map(|x| x.parse().expect("Wrong input."))
+        .collect();
+
+    let s_x = user_input[0];
+    let s_y = user_input[1];
+
+    field.render_with_light((s_x, s_y), 32);
+
+    screen.fill(DrawChar::Empty);
+
+    draw(&mut screen, &field, (f_x, f_y));
+    screen[[(s_y as usize) + f_y, (s_x as usize) + f_x]] = DrawChar::Char('@');
+
+    for row in screen.genrows() {
+        for c in row {
+            match c {
+                DrawChar::Char(c) => {
+                    print!("{}", c);
+                }
+                DrawChar::CharColored(c, color) => {
+                    print!("{}{}{}", color::Fg(*color), c, reset);
+                }
+                _ => {
+                    print!(" ");
+                }
+            }
+        }
+        print!("\n");
+    }
 }
