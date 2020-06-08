@@ -1,17 +1,13 @@
 use ndarray::{s, Array2};
 use rand::Rng;
-use std::io::Read;
 use std::io::{stdin, stdout, Write};
-use terminal_size::{terminal_size, Height, Width};
-use termion::async_stdin;
-use termion::event::{Event, Key};
-use std::io;
 use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
 use std::sync::mpsc::TryRecvError;
 use std::{thread, time};
+use termion::event::Key;
 use termion::input::TermRead;
 use termion::raw::IntoRawMode;
+use termion::terminal_size;
 use termion::{color, style};
 
 #[derive(Clone)]
@@ -230,20 +226,23 @@ fn draw<D: Drawable>(dest: &mut Array2<DrawChar>, src: &D, pos: (usize, usize)) 
     }
 }
 
-fn frame(screen: &Array2<DrawChar>) {
+fn frame(
+    stdout: &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>,
+    screen: &Array2<DrawChar>,
+) {
     let reset = style::Reset;
 
     for row in screen.genrows() {
         for c in row {
             match c {
                 DrawChar::Char(c) => {
-                    print!("{}", c);
+                    write!(stdout, "{}", c);
                 }
                 DrawChar::CharColored(c, color) => {
-                    print!("{}{}{}", color::Fg(*color), c, reset);
+                    write!(stdout, "{}{}{}", color::Fg(*color), c, reset);
                 }
                 _ => {
-                    print!(" ");
+                    write!(stdout, " ");
                 }
             }
         }
@@ -251,7 +250,7 @@ fn frame(screen: &Array2<DrawChar>) {
 }
 
 fn main() {
-    let (Width(width), Height(height)) = terminal_size().expect("Error terminal size.");
+    let (width, height) = terminal_size().unwrap();
 
     let screen_width = width as usize;
     let screen_height = height as usize;
@@ -271,7 +270,7 @@ fn main() {
     let mut empty_cells = field.get_empty();
     let (mut s_x, mut s_y) = empty_cells.remove(rand::random::<usize>() % empty_cells.len());
 
-    let mut stdout = stdout().into_raw_mode().unwrap();
+    let mut stdout = termion::screen::AlternateScreen::from(stdout().into_raw_mode().unwrap());
 
     write!(
         stdout,
@@ -289,7 +288,6 @@ fn main() {
     let stdin_process = thread::spawn(move || {
         let stdin = stdin();
         for c in stdin.keys() {
-
             if let Ok(c) = c {
                 tx.send(c).unwrap();
                 if let Key::Char('q') = c {
@@ -309,8 +307,8 @@ fn main() {
                 Key::Right => s_x += 1,
                 Key::Up => s_y -= 1,
                 Key::Down => s_y += 1,
-                _ => {},
-            }
+                _ => {}
+            },
             Err(TryRecvError::Empty) => {}
             Err(TryRecvError::Disconnected) => break,
         }
@@ -327,15 +325,12 @@ fn main() {
             "{}{}",
             termion::clear::All,
             termion::cursor::Goto(1, 1),
-        ).unwrap();
+        )
+        .unwrap();
 
-        frame(&screen);
+        frame(&mut stdout, &screen);
 
-        write!(
-            stdout,
-            "{}Press q to exit.",
-            termion::cursor::Goto(1, 1),
-        ).unwrap();
+        write!(stdout, "{}Press q to exit.", termion::cursor::Goto(1, 1),).unwrap();
 
         stdout.flush().unwrap();
         sleep(100);

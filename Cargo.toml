@@ -9,5 +9,4 @@ edition = "2018"
 [dependencies]
 rand = "0.7"
 termion = "1.5.5"
-terminal_size="0.1.12"
 ndarray = "0.13.1"
