@@ -195,26 +195,107 @@ impl Drawable for Field {
     }
 }
 
-fn draw_colored<D: Drawable>(
-    dest: &mut Array2<DrawChar>,
-    src: &D,
-    pos: (usize, usize),
-    color: color::Rgb,
-) {
-    for (p, v) in src.get_draw_data().indexed_iter() {
-        let x = p.1 + pos.0;
-        let y = p.0 + pos.1;
+#[derive(Clone)]
+struct BloodEffectPoint {
+    pos: (i32, i32),
+    speed: (f64, f64),
+    error: (f64, f64),
+    lifetime: i32,
+}
 
-        match (dest.get_mut([y, x]), v) {
-            (Some(p), &DrawChar::Char(c)) => *p = DrawChar::CharColored(c, color),
-            (Some(p), &DrawChar::CharColored(c, _)) => *p = DrawChar::CharColored(c, color),
-            _ => (),
+impl BloodEffectPoint {
+    fn new(pos: (i32, i32), speed: (f64, f64), lifetime: i32) -> BloodEffectPoint {
+        BloodEffectPoint {
+            pos,
+            speed,
+            lifetime,
+            error: (0.0, 0.0),
         }
     }
 }
 
-fn draw<D: Drawable>(dest: &mut Array2<DrawChar>, src: &D, pos: (usize, usize)) {
-    for (p, v) in src.get_draw_data().indexed_iter() {
+struct BloodEffect {
+    points: Vec<BloodEffectPoint>,
+}
+
+impl BloodEffect {
+    fn new() -> BloodEffect {
+        BloodEffect { points: Vec::new() }
+    }
+
+    fn spawn(&mut self, pos: (i32, i32), speed: (f64, f64), number: usize, power: f64) {
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..number {
+            let (sp_x, sp_y) = speed;
+            let k = power * (rng.gen::<f64>() * 0.2 + 0.9);
+            let (sp_x, sp_y) = (sp_x * k, sp_y * k);
+            let phi = (rng.gen::<f64>() - 0.5) * 3.14;
+            let sp = (
+                sp_x * phi.cos() + sp_y * phi.sin(),
+                sp_y * phi.cos() - sp_x * phi.sin(),
+            );
+            self.points
+                .push(BloodEffectPoint::new(pos, sp, rng.gen::<i32>() % 3 + 3));
+        }
+    }
+
+    fn run(&mut self) {
+        self.points = self
+            .points
+            .iter()
+            .filter(|x| x.lifetime > 0)
+            .map(|x| {
+                let mut pos = x.pos;
+                let mut error = x.error;
+                error.0 += x.speed.0;
+                error.1 += x.speed.1;
+                if error.0.abs() >= 0.5 {
+                    pos.0 += error.0.signum() as i32;
+                    error.0 -= error.0.signum();
+                }
+                if error.1.abs() >= 0.5 {
+                    pos.1 += error.1.signum() as i32;
+                    error.1 -= error.1.signum();
+                }
+                BloodEffectPoint {
+                    pos,
+                    error,
+                    speed: x.speed,
+                    lifetime: x.lifetime - 1,
+                }
+            })
+            .collect::<Vec<_>>();
+    }
+
+    fn get_draw_chars(&self) -> Vec<(i32, i32, DrawChar)> {
+        self.points
+            .iter()
+            .fold(Vec::<&BloodEffectPoint>::new(), |store, a| {
+                let mut new_store = store
+                    .into_iter()
+                    .filter(|x| x.pos != a.pos || x.lifetime < a.lifetime)
+                    .collect::<Vec<_>>();
+                new_store.push(a);
+                new_store
+            })
+            .into_iter()
+            .map(|x| {
+                (
+                    x.pos.0,
+                    x.pos.1,
+                    DrawChar::CharColored(
+                        if x.lifetime < 2 { '▒' } else { '█' },
+                        color::Rgb(0xEE, 0x33, 0x33),
+                    ),
+                )
+            })
+            .collect()
+    }
+}
+
+fn draw(dest: &mut Array2<DrawChar>, src: &Array2<DrawChar>, pos: (usize, usize)) {
+    for (p, v) in src.indexed_iter() {
         let x = p.1 + pos.0;
         let y = p.0 + pos.1;
 
@@ -236,13 +317,13 @@ fn frame(
         for c in row {
             match c {
                 DrawChar::Char(c) => {
-                    write!(stdout, "{}", c);
+                    write!(stdout, "{}", c).unwrap();
                 }
                 DrawChar::CharColored(c, color) => {
-                    write!(stdout, "{}{}{}", color::Fg(*color), c, reset);
+                    write!(stdout, "{}{}{}", color::Fg(*color), c, reset).unwrap();
                 }
                 _ => {
-                    write!(stdout, " ");
+                    write!(stdout, " ").unwrap();
                 }
             }
         }
@@ -268,7 +349,11 @@ fn main() {
     let f_y = (screen_height - field_height) / 2;
 
     let mut empty_cells = field.get_empty();
-    let (mut s_x, mut s_y) = empty_cells.remove(rand::random::<usize>() % empty_cells.len());
+    let (s_x, s_y) = empty_cells.remove(rand::random::<usize>() % empty_cells.len());
+    let mut s_x = s_x as i32;
+    let mut s_y = s_y as i32;
+
+    let mut blood_eff = BloodEffect::new();
 
     let mut stdout = termion::screen::AlternateScreen::from(stdout().into_raw_mode().unwrap());
 
@@ -299,26 +384,60 @@ fn main() {
 
     let stdin_channel = rx;
 
-    loop {
-        match stdin_channel.try_recv() {
-            Ok(key) => match key {
-                Key::Char('q') => break,
-                Key::Left => s_x -= 1,
-                Key::Right => s_x += 1,
-                Key::Up => s_y -= 1,
-                Key::Down => s_y += 1,
-                _ => {}
-            },
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => break,
+    let mut prev_dir = (0.0, 0.0);
+
+    'main: loop {
+        let mut v_x: i32 = 0;
+        let mut v_y: i32 = 0;
+        loop{
+            match stdin_channel.try_recv() {
+                Ok(key) => match key {
+                    Key::Char('q') => break 'main,
+                    Key::Left => v_x -= 1,
+                    Key::Right => v_x += 1,
+                    Key::Up => v_y -= 1,
+                    Key::Down => v_y += 1,
+                    Key::Char(' ') => blood_eff.spawn(
+                        (s_x as i32, s_y as i32),
+                        (prev_dir.0, prev_dir.1),
+                        2,
+                        0.6,
+                    ),
+                    _ => {}
+                },
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => break 'main,
+            }
         }
+
+        if v_x.abs() >= v_y.abs() {
+            v_x = v_x.signum();
+            v_y = 0;
+        }
+        else {
+            v_y = v_y.signum();
+            v_x = 0;
+        }
+
+        if v_x.abs() + v_y.abs() > 0 {
+            prev_dir = (v_x as f64, v_y as f64)
+        }
+
+        s_x += v_x;
+        s_y += v_y;
 
         field.render_with_light((s_x as i32, s_y as i32), 5);
 
         screen.fill(DrawChar::Empty);
 
-        draw(&mut screen, &field, (f_x, f_y));
+        draw(&mut screen, field.get_draw_data(), (f_x, f_y));
         screen[[(s_y as usize) + f_y, (s_x as usize) + f_x]] = DrawChar::Char('@');
+
+        for c in blood_eff.get_draw_chars().into_iter() {
+            if let Some(p) = screen.get_mut([(c.1 + f_y as i32) as usize, (c.0 + f_x as i32) as usize]) {
+                *p = c.2;
+            }
+        }
 
         write!(
             stdout,
@@ -330,10 +449,12 @@ fn main() {
 
         frame(&mut stdout, &screen);
 
-        write!(stdout, "{}Press q to exit.", termion::cursor::Goto(1, 1),).unwrap();
+        write!(stdout, "{}Press q to exit.", termion::cursor::Goto(1, 1)).unwrap();
 
         stdout.flush().unwrap();
         sleep(100);
+
+        blood_eff.run();
     }
 
     stdin_process.join().expect("Error join stdin process");
