@@ -119,10 +119,6 @@ impl Field {
         self.data = new_data;
     }
 
-    fn size(&self) -> (usize, usize) {
-        self.data.dim()
-    }
-
     fn set_bounds(&mut self) {
         let (h, w) = self.data.dim();
         for x in 0..w {
@@ -177,6 +173,19 @@ impl Field {
             }
         }
         self.sprite = Some(sprite);
+    }
+
+    fn is_wall(&self, x: i32, y: i32) -> bool {
+        if x < 0 || y < 0 {
+            return true;
+        }
+        match self.data.get([y as usize, x as usize]) {
+            None => true,
+            Some(p) => match p {
+                FieldCell::Empty => false,
+                FieldCell::Wall => true,
+            },
+        }
     }
 
     fn get_empty(&self) -> Vec<(usize, usize)> {
@@ -332,6 +341,7 @@ fn frame(
     }
 }
 
+#[derive(Clone, Copy)]
 struct Enemy {
     symbol: DrawChar,
     pos: (i32, i32),
@@ -343,21 +353,24 @@ impl Enemy {
         let d_x = (world.player.0 - self.pos.0) as f64;
         let d_y = (world.player.1 - self.pos.1) as f64;
         let l = (d_x * d_x + d_y * d_y).sqrt();
-        if l > 20.0 || l < 5.0 {
-            self.error = (0.0,0.0);
+        if l > 20.0 || l <= 1.0 {
+            self.error = (0.0, 0.0);
             return;
         }
         let d_x = d_x / l;
         let d_y = d_y / l;
         self.error.0 += d_x;
         self.error.1 += d_y;
+        let mut next = self.pos;
         if self.error.0.abs() >= self.error.1.abs() {
-            self.pos.0 += self.error.0.signum() as i32;
+            next.0 += self.error.0.signum() as i32;
             self.error.0 -= self.error.0.signum();
-        }
-        else {
-            self.pos.1 += self.error.1.signum() as i32;
+        } else {
+            next.1 += self.error.1.signum() as i32;
             self.error.1 -= self.error.1.signum();
+        }
+        if !world.field.is_wall(next.0, next.1) {
+            self.pos = next;
         }
     }
 }
@@ -366,6 +379,7 @@ struct World {
     blood_eff: BloodEffect,
     player: (i32, i32),
     field: Field,
+    enemies: Vec<Enemy>,
 }
 
 fn main() {
@@ -386,23 +400,24 @@ fn main() {
     let f_x = (screen_width - field_width) / 2;
     let f_y = (screen_height - field_height) / 2;
 
-    let mut empty_cells = field.get_empty().into_iter().map(|x| (x.0 as i32, x.1 as i32)).collect::<Vec<_>>();
+    let mut empty_cells = field
+        .get_empty()
+        .into_iter()
+        .map(|x| (x.0 as i32, x.1 as i32))
+        .collect::<Vec<_>>();
     let (mut s_x, mut s_y) = empty_cells.remove(rand::random::<usize>() % empty_cells.len());
 
-    let mut blood_eff = BloodEffect::new();
-
     let mut world = World {
-        blood_eff,
+        blood_eff: BloodEffect::new(),
         field,
         player: (s_x, s_y),
+        enemies: Vec::new(),
     };
 
-    let mut enemies: Vec<Enemy> = Vec::new();
-
-    enemies.push(Enemy {
+    world.enemies.push(Enemy {
         symbol: DrawChar::CharColored('G', color::Rgb(0x33, 0xff, 0x33)),
         pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
-        error: (0.0,0.0),
+        error: (0.0, 0.0),
     });
 
     let mut stdout = termion::screen::AlternateScreen::from(stdout().into_raw_mode().unwrap());
@@ -434,11 +449,12 @@ fn main() {
 
     let stdin_channel = rx;
 
-    let mut prev_dir = (0.0, 0.0);
+    // let mut prev_dir = (0.0, 0.0);
 
     'main: loop {
         let mut v_x: i32 = 0;
         let mut v_y: i32 = 0;
+        let mut made_action = false;
         loop {
             match stdin_channel.try_recv() {
                 Ok(key) => match key {
@@ -447,9 +463,6 @@ fn main() {
                     Key::Right => v_x += 1,
                     Key::Up => v_y -= 1,
                     Key::Down => v_y += 1,
-                    Key::Char(' ') => {
-                        world.blood_eff.spawn((s_x as i32, s_y as i32), (prev_dir.0, prev_dir.1), 2, 0.6)
-                    }
                     _ => {}
                 },
                 Err(TryRecvError::Empty) => break,
@@ -465,12 +478,29 @@ fn main() {
             v_x = 0;
         }
 
-        if v_x.abs() + v_y.abs() > 0 {
-            prev_dir = (v_x as f64, v_y as f64)
-        }
+        // if v_x.abs() + v_y.abs() > 0 {
+        //     prev_dir = (v_x as f64, v_y as f64)
+        // }
 
-        s_x += v_x;
-        s_y += v_y;
+        let next_x = s_x + v_x;
+        let next_y = s_y + v_y;
+
+        if v_x.abs() + v_y.abs() > 0 && !world.field.is_wall(next_x, next_y) {
+            let mut iter = world
+                .enemies
+                .iter()
+                .filter(|e| e.pos.0 == next_x && e.pos.1 == next_y);
+            if let Some(enemy) = iter.next() {
+                world
+                    .blood_eff
+                    .spawn(enemy.pos, (v_x as f64, v_y as f64), 2, 0.6);
+                made_action = true;
+            } else {
+                s_x += v_x;
+                s_y += v_y;
+                made_action = true;
+            }
+        }
 
         world.player = (s_x, s_y);
 
@@ -480,11 +510,17 @@ fn main() {
 
         draw(&mut screen, world.field.get_draw_data(), (f_x, f_y));
 
-        for en in enemies.iter() {
-            screen[[(en.pos.1 as usize) + f_y, (en.pos.0 as usize) + f_x]] = en.symbol;
+        for en in world.enemies.iter() {
+            let x = (en.pos.0 + f_x as i32) as usize;
+            let y = (en.pos.1 + f_y as i32) as usize;
+            if let DrawChar::Char(_) = screen[[y, x]] {
+                screen[[y, x]] = en.symbol;
+            } else if let DrawChar::CharColored(_, _) = screen[[y, x]] {
+                screen[[y, x]] = en.symbol;
+            }
         }
 
-        screen[[(s_y as usize) + f_y, (s_x as usize) + f_x]] = DrawChar::Char('@');
+        screen[[(s_y + f_y as i32) as usize, (s_x + f_x as i32) as usize]] = DrawChar::Char('@');
 
         for c in world.blood_eff.get_draw_chars().into_iter() {
             let x = (c.0 + f_x as i32) as usize;
@@ -508,8 +544,14 @@ fn main() {
 
         stdout.flush().unwrap();
 
-        for en in enemies.iter_mut() {
-            en.process(&mut world);
+        if made_action {
+            let mut enemies = world.enemies.clone();
+
+            for en in enemies.iter_mut() {
+                en.process(&mut world);
+            }
+
+            world.enemies = enemies;
         }
 
         sleep(100);
