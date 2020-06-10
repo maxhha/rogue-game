@@ -309,7 +309,7 @@ fn draw(dest: &mut Array2<DrawChar>, src: &Array2<DrawChar>, pos: (usize, usize)
 fn frame(
     stdout: &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>,
     screen: &mut Array2<DrawChar>,
-    blood_eff:    &mut BloodEffect,
+    blood_eff: &mut BloodEffect,
     field: &Field,
     field_pos: (usize, usize),
     player: &Player,
@@ -394,10 +394,17 @@ struct Enemy {
     timer: i32,
     step: f64,
     step_speed: f64,
+    stay_timer: i32,
 }
 
 impl Enemy {
-    fn process(&mut self, player: &Player, field: &Field, blood_eff: &mut BloodEffect) {
+    fn process(
+        &mut self,
+        player: &Player,
+        field: &Field,
+        blood_eff: &mut BloodEffect,
+        enemies: &Vec<Enemy>,
+    ) {
         if self.timer > 0 {
             self.timer -= 1;
         }
@@ -415,8 +422,16 @@ impl Enemy {
         }
         let d_x = d_x / l;
         let d_y = d_y / l;
-        self.error.0 += d_x;
-        self.error.1 += d_y;
+
+        let stay_k = f64::max((2.17_f64).powf(2.0*(self.stay_timer as f64)) - 1.0, 0.0);
+
+        self.error.0 += d_x + stay_k*(rand::random::<f64>() - 0.5);
+        self.error.1 += d_y + stay_k*(rand::random::<f64>() - 0.5);
+
+        let l = self.error.0.powf(2.0) + self.error.1.powf(2.0);
+        let l = l.sqrt();
+        self.error.0 /= l;
+        self.error.1 /= l;
         let mut next = self.pos;
         if self.error.0.abs() >= self.error.1.abs() {
             next.0 += self.error.0.signum() as i32;
@@ -425,8 +440,18 @@ impl Enemy {
             next.1 += self.error.1.signum() as i32;
             self.error.1 -= self.error.1.signum();
         }
-        if !field.is_wall(next.0, next.1) {
+        if !field.is_wall(next.0, next.1)
+            && enemies
+                .iter()
+                .filter(|e| e.pos.0 == next.0 && e.pos.1 == next.1)
+                .next()
+                .is_none()
+        {
             self.pos = next;
+            self.stay_timer = i32::max(self.stay_timer - 1, 0);
+        }
+        else {
+            self.stay_timer += 1;
         }
     }
 }
@@ -501,17 +526,17 @@ fn main() {
 
     let mut enemies = Vec::new();
 
-    for i in 3..=3 {
+    for _ in 1..=3 {
         enemies.push(Enemy {
             symbol: DrawChar::CharColored('G', color::Rgb(0x33, 0xff, 0x33)),
             pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
             error: (0.0, 0.0),
             timer: 0,
             step: 0.0,
-            step_speed: (i as f64) / 4.0,
+            step_speed: 0.75,
+            stay_timer: 0,
         });
     }
-
 
     let mut stdout = termion::screen::AlternateScreen::from(stdout().into_raw_mode().unwrap());
 
@@ -543,7 +568,6 @@ fn main() {
     let stdin_channel = rx;
 
     'main: loop {
-
         player.step += player.step_speed;
         let mut step_max = player.step;
 
@@ -569,7 +593,7 @@ fn main() {
                             Key::Right => v_x += 1,
                             Key::Up => v_y -= 1,
                             Key::Down => v_y += 1,
-                            _ => {}
+                            _ => (),
                         },
                         Err(TryRecvError::Empty) => break,
                         Err(TryRecvError::Disconnected) => break 'main,
@@ -590,7 +614,15 @@ fn main() {
                     false
                 };
 
-                frame(&mut stdout, &mut screen, &mut blood_eff, &field, (f_x, f_y), &player, &enemies);
+                frame(
+                    &mut stdout,
+                    &mut screen,
+                    &mut blood_eff,
+                    &field,
+                    (f_x, f_y),
+                    &player,
+                    &enemies,
+                );
 
                 if made_action {
                     break;
@@ -598,12 +630,25 @@ fn main() {
             }
         }
 
-        for en in enemies.iter_mut().filter(|x| x.step >= step_max) {
+        for i in 0..enemies.len() {
+            let mut en = enemies[i];
+            if en.step < step_max {
+                continue;
+            }
             en.step -= 1.0;
-            en.process(&player, &field, &mut blood_eff);
+            en.process(&player, &field, &mut blood_eff, &enemies);
+            enemies[i] = en;
         }
 
-        frame(&mut stdout, &mut screen, &mut blood_eff, &field, (f_x, f_y), &player, &enemies);
+        frame(
+            &mut stdout,
+            &mut screen,
+            &mut blood_eff,
+            &field,
+            (f_x, f_y),
+            &player,
+            &enemies,
+        );
     }
 
     stdin_process.join().expect("Error join stdin process");
