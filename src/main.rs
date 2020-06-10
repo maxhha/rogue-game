@@ -17,10 +17,6 @@ enum DrawChar {
     CharColored(char, color::Rgb),
 }
 
-trait Drawable {
-    fn get_draw_data(&self) -> &Array2<DrawChar>;
-}
-
 #[derive(Clone)]
 enum FieldCell {
     Empty,
@@ -28,14 +24,12 @@ enum FieldCell {
 }
 
 struct Field {
-    sprite: Option<Array2<DrawChar>>,
     data: Array2<FieldCell>,
 }
 
 impl Field {
     fn new(width: usize, height: usize) -> Field {
         Field {
-            sprite: None,
             data: Array2::from_elem((height, width), FieldCell::Empty),
         }
     }
@@ -131,14 +125,14 @@ impl Field {
         }
     }
 
-    fn render_all(&mut self) {
-        self.sprite = Some(self.data.map(|x| match x {
+    fn render_all(&mut self) -> Array2<DrawChar> {
+        self.data.map(|x| match x {
             FieldCell::Empty => DrawChar::Char('.'),
             FieldCell::Wall => DrawChar::CharColored('█', color::Rgb(0x88, 0x66, 0x88)),
-        }));
+        })
     }
 
-    fn render_with_light(&mut self, source: (i32, i32), distance: usize) {
+    fn render_with_light(&self, source: (i32, i32), distance: usize) -> Array2<DrawChar> {
         let (h, w) = self.data.dim();
         let mut sprite = Array2::from_elem((h, w), DrawChar::Empty);
 
@@ -172,7 +166,7 @@ impl Field {
                 }
             }
         }
-        self.sprite = Some(sprite);
+        sprite
     }
 
     fn is_wall(&self, x: i32, y: i32) -> bool {
@@ -197,12 +191,6 @@ impl Field {
             }
         }
         v
-    }
-}
-
-impl Drawable for Field {
-    fn get_draw_data(&self) -> &Array2<DrawChar> {
-        self.sprite.as_ref().expect("Not rendered field")
     }
 }
 
@@ -320,8 +308,53 @@ fn draw(dest: &mut Array2<DrawChar>, src: &Array2<DrawChar>, pos: (usize, usize)
 
 fn frame(
     stdout: &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>,
-    screen: &Array2<DrawChar>,
+    screen: &mut Array2<DrawChar>,
+    blood_eff:    &mut BloodEffect,
+    field: &Field,
+    field_pos: (usize, usize),
+    player: &Player,
+    enemies: &Vec<Enemy>,
 ) {
+    let f_x = field_pos.0 as i32;
+    let f_y = field_pos.1 as i32;
+
+    screen.fill(DrawChar::Empty);
+
+    let field_sprite = field.render_with_light(player.pos, 5);
+
+    draw(screen, &field_sprite, field_pos);
+
+    for en in enemies.iter() {
+        let x = (en.pos.0 + f_x as i32) as usize;
+        let y = (en.pos.1 + f_y as i32) as usize;
+        if let DrawChar::Char(_) = screen[[y, x]] {
+            screen[[y, x]] = en.symbol;
+        } else if let DrawChar::CharColored(_, _) = screen[[y, x]] {
+            screen[[y, x]] = en.symbol;
+        }
+    }
+
+    screen[[
+        (player.pos.1 + f_y as i32) as usize,
+        (player.pos.0 + f_x as i32) as usize,
+    ]] = DrawChar::Char('@');
+
+    for c in blood_eff.get_draw_chars().into_iter() {
+        let x = (c.0 + f_x as i32) as usize;
+        let y = (c.1 + f_y as i32) as usize;
+        if let Some(p) = screen.get_mut([y, x]) {
+            *p = c.2;
+        }
+    }
+
+    write!(
+        stdout,
+        "{}{}",
+        termion::clear::All,
+        termion::cursor::Goto(1, 1),
+    )
+    .unwrap();
+
     let reset = style::Reset;
 
     for row in screen.genrows() {
@@ -339,6 +372,18 @@ fn frame(
             }
         }
     }
+
+    write!(
+        stdout,
+        "{}Press q to exit.\n\rArrows to move and attack",
+        termion::cursor::Goto(1, 1)
+    )
+    .unwrap();
+
+    stdout.flush().unwrap();
+
+    sleep(100);
+    blood_eff.run();
 }
 
 #[derive(Clone, Copy)]
@@ -346,15 +391,26 @@ struct Enemy {
     symbol: DrawChar,
     pos: (i32, i32),
     error: (f64, f64),
+    timer: i32,
+    step: f64,
+    step_speed: f64,
 }
 
 impl Enemy {
-    fn process(&mut self, world: &mut World) {
-        let d_x = (world.player.0 - self.pos.0) as f64;
-        let d_y = (world.player.1 - self.pos.1) as f64;
+    fn process(&mut self, player: &Player, field: &Field, blood_eff: &mut BloodEffect) {
+        if self.timer > 0 {
+            self.timer -= 1;
+        }
+        let d_x = (player.pos.0 - self.pos.0) as f64;
+        let d_y = (player.pos.1 - self.pos.1) as f64;
         let l = (d_x * d_x + d_y * d_y).sqrt();
         if l > 20.0 || l <= 1.0 {
             self.error = (0.0, 0.0);
+
+            if l <= 1.0 && self.timer <= 0 {
+                self.timer = 2;
+                blood_eff.spawn(player.pos, (d_x, d_y), 2, 0.6)
+            }
             return;
         }
         let d_x = d_x / l;
@@ -369,17 +425,46 @@ impl Enemy {
             next.1 += self.error.1.signum() as i32;
             self.error.1 -= self.error.1.signum();
         }
-        if !world.field.is_wall(next.0, next.1) {
+        if !field.is_wall(next.0, next.1) {
             self.pos = next;
         }
     }
 }
 
-struct World {
-    blood_eff: BloodEffect,
-    player: (i32, i32),
-    field: Field,
-    enemies: Vec<Enemy>,
+struct Player {
+    pos: (i32, i32),
+    step: f64,
+    step_speed: f64,
+}
+
+impl Player {
+    fn action(
+        &mut self,
+        blood_eff: &mut BloodEffect,
+        direction: (i32, i32),
+        field: &Field,
+        enemies: &Vec<Enemy>,
+    ) -> bool {
+        let (v_x, v_y) = direction;
+        let next_x = self.pos.0 + v_x;
+        let next_y = self.pos.1 + v_y;
+
+        if !field.is_wall(next_x, next_y) {
+            let first_enemy = enemies
+                .iter()
+                .filter(|e| e.pos.0 == next_x && e.pos.1 == next_y)
+                .next();
+            if let Some(enemy) = first_enemy {
+                blood_eff.spawn(enemy.pos, (v_x as f64, v_y as f64), 2, 0.6);
+                true
+            } else {
+                self.pos = (next_x, next_y);
+                true
+            }
+        } else {
+            false
+        }
+    }
 }
 
 fn main() {
@@ -405,20 +490,28 @@ fn main() {
         .into_iter()
         .map(|x| (x.0 as i32, x.1 as i32))
         .collect::<Vec<_>>();
-    let (mut s_x, mut s_y) = empty_cells.remove(rand::random::<usize>() % empty_cells.len());
 
-    let mut world = World {
-        blood_eff: BloodEffect::new(),
-        field,
-        player: (s_x, s_y),
-        enemies: Vec::new(),
+    let mut blood_eff = BloodEffect::new();
+
+    let mut player = Player {
+        pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
+        step: 0.0,
+        step_speed: 1.0,
     };
 
-    world.enemies.push(Enemy {
-        symbol: DrawChar::CharColored('G', color::Rgb(0x33, 0xff, 0x33)),
-        pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
-        error: (0.0, 0.0),
-    });
+    let mut enemies = Vec::new();
+
+    for i in 3..=3 {
+        enemies.push(Enemy {
+            symbol: DrawChar::CharColored('G', color::Rgb(0x33, 0xff, 0x33)),
+            pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
+            error: (0.0, 0.0),
+            timer: 0,
+            step: 0.0,
+            step_speed: (i as f64) / 4.0,
+        });
+    }
+
 
     let mut stdout = termion::screen::AlternateScreen::from(stdout().into_raw_mode().unwrap());
 
@@ -449,113 +542,68 @@ fn main() {
 
     let stdin_channel = rx;
 
-    // let mut prev_dir = (0.0, 0.0);
-
     'main: loop {
-        let mut v_x: i32 = 0;
-        let mut v_y: i32 = 0;
-        let mut made_action = false;
-        loop {
-            match stdin_channel.try_recv() {
-                Ok(key) => match key {
-                    Key::Char('q') => break 'main,
-                    Key::Left => v_x -= 1,
-                    Key::Right => v_x += 1,
-                    Key::Up => v_y -= 1,
-                    Key::Down => v_y += 1,
-                    _ => {}
-                },
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => break 'main,
+
+        player.step += player.step_speed;
+        let mut step_max = player.step;
+
+        for en in enemies.iter_mut() {
+            en.step += en.step_speed;
+            if en.step > step_max {
+                step_max = en.step;
             }
         }
 
-        if v_x.abs() >= v_y.abs() {
-            v_x = v_x.signum();
-            v_y = 0;
-        } else {
-            v_y = v_y.signum();
-            v_x = 0;
-        }
+        if player.step >= step_max {
+            player.step -= 1.0;
 
-        // if v_x.abs() + v_y.abs() > 0 {
-        //     prev_dir = (v_x as f64, v_y as f64)
-        // }
+            loop {
+                let mut v_x: i32 = 0;
+                let mut v_y: i32 = 0;
 
-        let next_x = s_x + v_x;
-        let next_y = s_y + v_y;
+                loop {
+                    match stdin_channel.try_recv() {
+                        Ok(key) => match key {
+                            Key::Char('q') => break 'main,
+                            Key::Left => v_x -= 1,
+                            Key::Right => v_x += 1,
+                            Key::Up => v_y -= 1,
+                            Key::Down => v_y += 1,
+                            _ => {}
+                        },
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => break 'main,
+                    }
+                }
 
-        if v_x.abs() + v_y.abs() > 0 && !world.field.is_wall(next_x, next_y) {
-            let mut iter = world
-                .enemies
-                .iter()
-                .filter(|e| e.pos.0 == next_x && e.pos.1 == next_y);
-            if let Some(enemy) = iter.next() {
-                world
-                    .blood_eff
-                    .spawn(enemy.pos, (v_x as f64, v_y as f64), 2, 0.6);
-                made_action = true;
-            } else {
-                s_x += v_x;
-                s_y += v_y;
-                made_action = true;
+                if v_x.abs() >= v_y.abs() {
+                    v_x = v_x.signum();
+                    v_y = 0;
+                } else {
+                    v_y = v_y.signum();
+                    v_x = 0;
+                }
+
+                let made_action = if v_x.abs() + v_y.abs() > 0 {
+                    player.action(&mut blood_eff, (v_x, v_y), &field, &enemies)
+                } else {
+                    false
+                };
+
+                frame(&mut stdout, &mut screen, &mut blood_eff, &field, (f_x, f_y), &player, &enemies);
+
+                if made_action {
+                    break;
+                }
             }
         }
 
-        world.player = (s_x, s_y);
-
-        world.field.render_with_light((s_x as i32, s_y as i32), 5);
-
-        screen.fill(DrawChar::Empty);
-
-        draw(&mut screen, world.field.get_draw_data(), (f_x, f_y));
-
-        for en in world.enemies.iter() {
-            let x = (en.pos.0 + f_x as i32) as usize;
-            let y = (en.pos.1 + f_y as i32) as usize;
-            if let DrawChar::Char(_) = screen[[y, x]] {
-                screen[[y, x]] = en.symbol;
-            } else if let DrawChar::CharColored(_, _) = screen[[y, x]] {
-                screen[[y, x]] = en.symbol;
-            }
+        for en in enemies.iter_mut().filter(|x| x.step >= step_max) {
+            en.step -= 1.0;
+            en.process(&player, &field, &mut blood_eff);
         }
 
-        screen[[(s_y + f_y as i32) as usize, (s_x + f_x as i32) as usize]] = DrawChar::Char('@');
-
-        for c in world.blood_eff.get_draw_chars().into_iter() {
-            let x = (c.0 + f_x as i32) as usize;
-            let y = (c.1 + f_y as i32) as usize;
-            if let Some(p) = screen.get_mut([y, x]) {
-                *p = c.2;
-            }
-        }
-
-        write!(
-            stdout,
-            "{}{}",
-            termion::clear::All,
-            termion::cursor::Goto(1, 1),
-        )
-        .unwrap();
-
-        frame(&mut stdout, &screen);
-
-        write!(stdout, "{}Press q to exit.", termion::cursor::Goto(1, 1)).unwrap();
-
-        stdout.flush().unwrap();
-
-        if made_action {
-            let mut enemies = world.enemies.clone();
-
-            for en in enemies.iter_mut() {
-                en.process(&mut world);
-            }
-
-            world.enemies = enemies;
-        }
-
-        sleep(100);
-        world.blood_eff.run();
+        frame(&mut stdout, &mut screen, &mut blood_eff, &field, (f_x, f_y), &player, &enemies);
     }
 
     stdin_process.join().expect("Error join stdin process");
