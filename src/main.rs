@@ -320,7 +320,6 @@ fn frame(
 
     screen.fill(DrawChar::Empty);
 
-
     let field_sprite = field.render_with_light(player.pos, player.lighting_power as usize);
 
     draw(screen, &field_sprite, field_pos);
@@ -376,14 +375,28 @@ fn frame(
 
     write!(
         stdout,
-        "{}Press q to exit.\n\rArrows to move and attack",
-        termion::cursor::Goto(1, 1)
+        "{}Press q to exit.\n\rArrows to move and attack\n\rEnemies: {}",
+        termion::cursor::Goto(1, 1),
+        enemies.len(),
     )
     .unwrap();
 
     stdout.flush().unwrap();
 
     blood_eff.run();
+}
+
+#[derive(Clone, Copy)]
+struct UnitInfo {
+    attack: f64,
+    defence: f64,
+    luck: f64,
+}
+
+impl UnitInfo {
+    fn kill_prob(&self, enemy: &UnitInfo) -> f64 {
+        self.attack * (1.0 + self.luck) / enemy.defence / (1.0 + enemy.luck)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -395,6 +408,7 @@ struct Enemy {
     step: f64,
     step_speed: f64,
     stay_timer: i32,
+    info: UnitInfo,
 }
 
 impl Enemy {
@@ -416,8 +430,13 @@ impl Enemy {
 
             if l <= 1.0 && self.timer <= 0 {
                 self.timer = 2;
-                blood_eff.spawn(player.pos, (d_x, d_y), 2, 0.6);
-                if rand::random::<f64>() > 0.98 {
+                blood_eff.spawn(
+                    player.pos,
+                    (d_x, d_y),
+                    (2.0 * self.info.attack / 0.03) as usize,
+                    0.6 * self.info.attack / 0.03,
+                );
+                if rand::random::<f64>() < self.info.kill_prob(&player.info) {
                     player.dead = true;
                 }
             }
@@ -464,6 +483,7 @@ struct Player {
     step_speed: f64,
     dead: bool,
     lighting_power: i32,
+    info: UnitInfo,
 }
 
 impl Player {
@@ -481,13 +501,13 @@ impl Player {
         if !field.is_wall(next_x, next_y) {
             let first_enemy = enemies
                 .iter()
-                .filter(|e| e.pos.0 == next_x && e.pos.1 == next_y)
                 .enumerate()
+                .filter(|x| x.1.pos.0 == next_x && x.1.pos.1 == next_y)
                 .map(|x| x.0)
                 .next();
             if let Some(enemy_i) = first_enemy {
                 blood_eff.spawn((next_x, next_y), (v_x as f64, v_y as f64), 2, 0.6);
-                if rand::random::<f64>() > 0.6 {
+                if rand::random::<f64>() < self.info.kill_prob(&enemies[enemy_i].info) {
                     enemies.remove(enemy_i);
                 }
                 true
@@ -501,7 +521,7 @@ impl Player {
     }
 }
 
-fn main() {
+fn game() -> bool {
     let (width, height) = terminal_size().unwrap();
 
     let screen_width = width as usize;
@@ -509,9 +529,9 @@ fn main() {
 
     let mut screen = Array2::from_elem((screen_height, screen_width), DrawChar::Empty);
 
-    let field_width = 20;
-    let field_height = 10;
-    let mut field = Field::rand_cave(field_width, field_height, 0.56, 3);
+    let field_width = screen_width / 4;
+    let field_height = screen_height / 2;
+    let mut field = Field::rand_cave(field_width, field_height, 0.6, 1);
 
     let field_width = field_width * 2;
     field.stretch(2, 1);
@@ -533,21 +553,70 @@ fn main() {
         step_speed: 1.0,
         dead: false,
         lighting_power: 5,
+        info: UnitInfo {
+            attack: 1.0,
+            defence: 1.0,
+            luck: 0.0,
+        },
     };
 
     let mut enemies = Vec::new();
+    let rats = 25;
+    let goblins = 10;
+    let trolls = 5;
 
-    for i in 1..=4 {
+    for _ in 0..rats {
+        enemies.push(Enemy {
+            symbol: DrawChar::CharColored('r', color::Rgb(0x66, 0x66, 0x77)),
+            pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
+            error: (0.0, 0.0),
+            timer: 0,
+            step: 0.0,
+            step_speed: 2.0,
+            stay_timer: 0,
+            info: UnitInfo {
+                attack: 0.01,
+                defence: 1.0,
+                luck: 0.0,
+            },
+        });
+    }
+
+    for _ in 0..goblins {
         enemies.push(Enemy {
             symbol: DrawChar::CharColored('G', color::Rgb(0x33, 0xff, 0x33)),
             pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
             error: (0.0, 0.0),
             timer: 0,
             step: 0.0,
-            step_speed: 0.75 + ((i / 4) as f64) / 16.0,
+            step_speed: 0.75,
             stay_timer: 0,
+            info: UnitInfo {
+                attack: 0.05,
+                defence: 5.0,
+                luck: 0.0,
+            },
         });
     }
+
+    for _ in 0..trolls {
+        enemies.push(Enemy {
+            symbol: DrawChar::CharColored('T', color::Rgb(0x44, 0xee, 0xee)),
+            pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
+            error: (0.0, 0.0),
+            timer: 0,
+            step: 0.0,
+            step_speed: 0.2,
+            stay_timer: 0,
+            info: UnitInfo {
+                attack: 0.25,
+                defence: 25.0,
+                luck: 0.0,
+            },
+        });
+    }
+
+    let start_enemies = enemies.len();
 
     let mut stdout = termion::screen::AlternateScreen::from(stdout().into_raw_mode().unwrap());
 
@@ -569,14 +638,18 @@ fn main() {
         for c in stdin.keys() {
             if let Ok(c) = c {
                 tx.send(c).unwrap();
-                if let Key::Char('q') = c {
-                    break;
+                match c {
+                    Key::Char('q') => break,
+                    Key::Char('r') => break,
+                    _ => ()
                 }
             }
         }
     });
 
     let stdin_channel = rx;
+
+    let mut restart = false;
 
     'main: loop {
         let now = std::time::Instant::now();
@@ -680,6 +753,7 @@ fn main() {
                     &player,
                     &enemies,
                 );
+                sleep(100);
                 player.lighting_power -= 1;
                 frame(
                     &mut stdout,
@@ -690,14 +764,16 @@ fn main() {
                     &player,
                     &enemies,
                 );
+                sleep(100);
             }
 
             write!(
                 stdout,
-                "{}{}Press q to exit",
+                "{}{}",
                 termion::clear::All,
                 termion::cursor::Goto(1, 1),
-            ).unwrap();
+            )
+            .unwrap();
             write!(
                 stdout,
                 "{}
@@ -720,18 +796,21 @@ Uaam                  X|wUw            \r
    Xa       .awTwo( *UUUwUThU   \r
 i   XU.         .UUUBUwu( **URm \r
 Rai               UUUUUBUUen",
-            termion::cursor::Goto(1, screen_height as u16 - 19),
-            ).unwrap();
+                termion::cursor::Goto(1, screen_height as u16 - 19),
+            )
+            .unwrap();
             stdout.flush().unwrap();
 
-            sleep(200);
+            sleep(300);
 
             write!(
                 stdout,
-                "{}{}Press q to exit",
+                "{}{}Kills: {}\n\rPress q to exit\n\r      r to restart",
                 termion::clear::All,
                 termion::cursor::Goto(1, 1),
-            ).unwrap();
+                start_enemies - enemies.len(),
+            )
+            .unwrap();
             write!(
                 stdout,
                 "{}
@@ -755,8 +834,9 @@ W$@@M!!! .!~~ !!     .:XUW$W!~ `\"~:    :\r
 Wi.~!X$?!-~    : ?$$$B$Wu(\"**$RM!\r
 $R@i.~~ !     :   ~$$$$$B$$en:``\r
 ?MXT@Wx.~    :     ~\"##*$$$$M~",
-            termion::cursor::Goto(1, screen_height as u16 - 20),
-            ).unwrap();
+                termion::cursor::Goto(1, screen_height as u16 - 20),
+            )
+            .unwrap();
             stdout.flush().unwrap();
 
             loop {
@@ -764,6 +844,10 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
                     match stdin_channel.try_recv() {
                         Ok(key) => match key {
                             Key::Char('q') => break 'main,
+                            Key::Char('r') => {
+                                restart = true;
+                                break 'main;
+                            },
                             _ => (),
                         },
                         Err(TryRecvError::Empty) => break,
@@ -778,6 +862,16 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
     stdin_process.join().expect("Error join stdin process");
 
     write!(stdout, "{}", termion::cursor::Show).unwrap();
+
+    restart
+}
+
+fn main() {
+    loop {
+        if !game() {
+            break
+        }
+    }
 }
 
 fn sleep(millis: u64) {
