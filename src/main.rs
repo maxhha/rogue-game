@@ -125,7 +125,7 @@ impl Field {
         }
     }
 
-    fn render_all(&mut self) -> Array2<DrawChar> {
+    fn render_all(&self) -> Array2<DrawChar> {
         self.data.map(|x| match x {
             FieldCell::Empty => DrawChar::Char('.'),
             FieldCell::Wall => DrawChar::CharColored('█', color::Rgb(0x88, 0x66, 0x88)),
@@ -320,7 +320,8 @@ fn frame(
 
     screen.fill(DrawChar::Empty);
 
-    let field_sprite = field.render_with_light(player.pos, 5);
+
+    let field_sprite = field.render_with_light(player.pos, player.lighting_power as usize);
 
     draw(screen, &field_sprite, field_pos);
 
@@ -382,7 +383,6 @@ fn frame(
 
     stdout.flush().unwrap();
 
-    sleep(100);
     blood_eff.run();
 }
 
@@ -400,7 +400,7 @@ struct Enemy {
 impl Enemy {
     fn process(
         &mut self,
-        player: &Player,
+        player: &mut Player,
         field: &Field,
         blood_eff: &mut BloodEffect,
         enemies: &Vec<Enemy>,
@@ -411,22 +411,25 @@ impl Enemy {
         let d_x = (player.pos.0 - self.pos.0) as f64;
         let d_y = (player.pos.1 - self.pos.1) as f64;
         let l = (d_x * d_x + d_y * d_y).sqrt();
-        if l > 20.0 || l <= 1.0 {
+        if l > 8.0 || l <= 1.0 {
             self.error = (0.0, 0.0);
 
             if l <= 1.0 && self.timer <= 0 {
                 self.timer = 2;
-                blood_eff.spawn(player.pos, (d_x, d_y), 2, 0.6)
+                blood_eff.spawn(player.pos, (d_x, d_y), 2, 0.6);
+                if rand::random::<f64>() > 0.98 {
+                    player.dead = true;
+                }
             }
             return;
         }
         let d_x = d_x / l;
         let d_y = d_y / l;
 
-        let stay_k = f64::max((2.17_f64).powf(2.0*(self.stay_timer as f64)) - 1.0, 0.0);
+        let stay_k = f64::max((2.17_f64).powf(2.0 * (self.stay_timer as f64)) - 1.0, 0.0);
 
-        self.error.0 += d_x + stay_k*(rand::random::<f64>() - 0.5);
-        self.error.1 += d_y + stay_k*(rand::random::<f64>() - 0.5);
+        self.error.0 += d_x + stay_k * (rand::random::<f64>() - 0.5);
+        self.error.1 += d_y + stay_k * (rand::random::<f64>() - 0.5);
 
         let l = self.error.0.powf(2.0) + self.error.1.powf(2.0);
         let l = l.sqrt();
@@ -449,8 +452,7 @@ impl Enemy {
         {
             self.pos = next;
             self.stay_timer = i32::max(self.stay_timer - 1, 0);
-        }
-        else {
+        } else {
             self.stay_timer += 1;
         }
     }
@@ -460,6 +462,8 @@ struct Player {
     pos: (i32, i32),
     step: f64,
     step_speed: f64,
+    dead: bool,
+    lighting_power: i32,
 }
 
 impl Player {
@@ -468,7 +472,7 @@ impl Player {
         blood_eff: &mut BloodEffect,
         direction: (i32, i32),
         field: &Field,
-        enemies: &Vec<Enemy>,
+        enemies: &mut Vec<Enemy>,
     ) -> bool {
         let (v_x, v_y) = direction;
         let next_x = self.pos.0 + v_x;
@@ -478,9 +482,14 @@ impl Player {
             let first_enemy = enemies
                 .iter()
                 .filter(|e| e.pos.0 == next_x && e.pos.1 == next_y)
+                .enumerate()
+                .map(|x| x.0)
                 .next();
-            if let Some(enemy) = first_enemy {
-                blood_eff.spawn(enemy.pos, (v_x as f64, v_y as f64), 2, 0.6);
+            if let Some(enemy_i) = first_enemy {
+                blood_eff.spawn((next_x, next_y), (v_x as f64, v_y as f64), 2, 0.6);
+                if rand::random::<f64>() > 0.6 {
+                    enemies.remove(enemy_i);
+                }
                 true
             } else {
                 self.pos = (next_x, next_y);
@@ -502,7 +511,7 @@ fn main() {
 
     let field_width = 20;
     let field_height = 10;
-    let mut field = Field::rand_cave(field_width, field_height, 0.66, 3);
+    let mut field = Field::rand_cave(field_width, field_height, 0.56, 3);
 
     let field_width = field_width * 2;
     field.stretch(2, 1);
@@ -522,18 +531,20 @@ fn main() {
         pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
         step: 0.0,
         step_speed: 1.0,
+        dead: false,
+        lighting_power: 5,
     };
 
     let mut enemies = Vec::new();
 
-    for _ in 1..=3 {
+    for i in 1..=4 {
         enemies.push(Enemy {
             symbol: DrawChar::CharColored('G', color::Rgb(0x33, 0xff, 0x33)),
             pos: empty_cells.remove(rand::random::<usize>() % empty_cells.len()),
             error: (0.0, 0.0),
             timer: 0,
             step: 0.0,
-            step_speed: 0.75,
+            step_speed: 0.75 + ((i / 4) as f64) / 16.0,
             stay_timer: 0,
         });
     }
@@ -568,6 +579,8 @@ fn main() {
     let stdin_channel = rx;
 
     'main: loop {
+        let now = std::time::Instant::now();
+
         player.step += player.step_speed;
         let mut step_max = player.step;
 
@@ -579,9 +592,11 @@ fn main() {
         }
 
         if player.step >= step_max {
-            player.step -= 1.0;
+            player.step = 0.0;
 
             loop {
+                let now = std::time::Instant::now();
+
                 let mut v_x: i32 = 0;
                 let mut v_y: i32 = 0;
 
@@ -609,7 +624,7 @@ fn main() {
                 }
 
                 let made_action = if v_x.abs() + v_y.abs() > 0 {
-                    player.action(&mut blood_eff, (v_x, v_y), &field, &enemies)
+                    player.action(&mut blood_eff, (v_x, v_y), &field, &mut enemies)
                 } else {
                     false
                 };
@@ -624,6 +639,8 @@ fn main() {
                     &enemies,
                 );
 
+                sleep(i64::max(100 - now.elapsed().as_millis() as i64, 0) as u64);
+
                 if made_action {
                     break;
                 }
@@ -635,8 +652,8 @@ fn main() {
             if en.step < step_max {
                 continue;
             }
-            en.step -= 1.0;
-            en.process(&player, &field, &mut blood_eff, &enemies);
+            en.step = 0.0;
+            en.process(&mut player, &field, &mut blood_eff, &enemies);
             enemies[i] = en;
         }
 
@@ -649,6 +666,113 @@ fn main() {
             &player,
             &enemies,
         );
+
+        sleep(i64::max(100 - now.elapsed().as_millis() as i64, 0) as u64);
+
+        if player.dead {
+            while player.lighting_power > 0 {
+                frame(
+                    &mut stdout,
+                    &mut screen,
+                    &mut blood_eff,
+                    &field,
+                    (f_x, f_y),
+                    &player,
+                    &enemies,
+                );
+                player.lighting_power -= 1;
+                frame(
+                    &mut stdout,
+                    &mut screen,
+                    &mut blood_eff,
+                    &field,
+                    (f_x, f_y),
+                    &player,
+                    &enemies,
+                );
+            }
+
+            write!(
+                stdout,
+                "{}{}Press q to exit",
+                termion::clear::All,
+                termion::cursor::Goto(1, 1),
+            ).unwrap();
+            write!(
+                stdout,
+                "{}
+                \r
+               :|hwh     .m::whX  \r
+             X*#ma$     X mUUUUUUww:  \r
+                  .h    U UUUUUUUUUU:X \r
+                        U #UUUUUUUUUU:X \r
+               h -     |UX .RUUUUUUUUmm \r
+                     XwUUU|  .UUUUUURmm \r
+                    m T#UUUUwX..#mRRmmm \r
+            .wu:iw*      #UUUU:    ..   \r
+          X  mUUUU         T#UT  :Uw|X| \r
+         %    #UUUm             .UUUUUU\r
+               TUUUU8::    :ww     ##* \r
+        -        .T#UUaawa*.UU      / \r
+Uaam                  X|wUw            \r
+      :%      h     wmUUUUTi     w|n+  \r
+     X     .h  u  UUUBUUU w | TUUm \r
+   Xa       .awTwo( *UUUwUThU   \r
+i   XU.         .UUUBUwu( **URm \r
+Rai               UUUUUBUUen",
+            termion::cursor::Goto(1, screen_height as u16 - 19),
+            ).unwrap();
+            stdout.flush().unwrap();
+
+            sleep(200);
+
+            write!(
+                stdout,
+                "{}{}Press q to exit",
+                termion::clear::All,
+                termion::cursor::Goto(1, 1),
+            ).unwrap();
+            write!(
+                stdout,
+                "{}
+                      :::!~!!!!!:.\r
+                  .xUHWH!! !!?M88WHX:.\r
+                .X*#M@$!!  !X!M$$$$$$WWx:.\r
+               :!!!!!!?H! :!$!$$$$$$$$$$8X:\r
+              !!~  ~:~!! :~!$!#$$$$$$$$$$8X:\r
+             :!~::!H!<   ~.U$X!?R$$$$$$$$MM!\r
+             ~!~!!!!~~ .:XW$$$U!!?$$$$$$RMM!\r
+               !:~~~ .:!M\"T#$$$$WX??#MRRMMM!\r
+               ~?WuxiW*`   `\"#$$$$8!!!!??!!!\r
+             :X- M$$$$       `\"T#$T~!8$WUXU~\r
+            :%`  ~#$$$m:        ~!~ ?$$$$$$\r
+          :!`.-   ~T$$$$8xx.  .xWW- ~\"\"##*\"\r
+.....   -~~:<` !    ~?T#$$@@W@*?$$      /`\r
+W$@@M!!! .!~~ !!     .:XUW$W!~ `\"~:    :\r
+#\"~~`.:x%`!!  !H:   !WM$$$$Ti.: .!WUn+!`\r
+:::~:!!`:X~ .: ?H.!u \"$$$B$$$!W:U!T$$M~\r
+.~~   :X@!.-~   ?@WTWo(\"*$$$W$TH$! `\r
+Wi.~!X$?!-~    : ?$$$B$Wu(\"**$RM!\r
+$R@i.~~ !     :   ~$$$$$B$$en:``\r
+?MXT@Wx.~    :     ~\"##*$$$$M~",
+            termion::cursor::Goto(1, screen_height as u16 - 20),
+            ).unwrap();
+            stdout.flush().unwrap();
+
+            loop {
+                loop {
+                    match stdin_channel.try_recv() {
+                        Ok(key) => match key {
+                            Key::Char('q') => break 'main,
+                            _ => (),
+                        },
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => break 'main,
+                    }
+                }
+                sleep(100);
+            }
+        }
     }
 
     stdin_process.join().expect("Error join stdin process");
@@ -657,6 +781,9 @@ fn main() {
 }
 
 fn sleep(millis: u64) {
+    if millis == 0 {
+        return;
+    }
     let duration = time::Duration::from_millis(millis);
     thread::sleep(duration);
 }
