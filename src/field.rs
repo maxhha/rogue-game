@@ -35,6 +35,25 @@ impl FieldCell {
             Self::Wall => ctx.print_color(x, y, COLOR_WALL, COLOR_BG, "█"),
         }
     }
+
+    fn smoothed(&self, n_neighbour_walls: u32) -> Self {
+        match self {
+            Self::Empty => {
+                if n_neighbour_walls > 4 {
+                    Self::Wall
+                } else {
+                    Self::Empty
+                }
+            }
+            Self::Wall => {
+                if n_neighbour_walls > 4 {
+                    Self::Wall
+                } else {
+                    Self::Empty
+                }
+            }
+        }
+    }
 }
 
 pub struct Field {
@@ -54,20 +73,6 @@ impl Field {
                 .map(|_| std::iter::repeat(FieldCell::Empty).take(width).collect())
                 .collect(),
         }
-    }
-
-    /// Create cave field
-    pub fn cave(width: usize, height: usize, prob_empty_cell: f32, smooth_repeats: usize) -> Field {
-        let mut field = Field::new(width, height);
-
-        field.fill_rand(prob_empty_cell);
-        field.set_borders();
-
-        // for _ in 0..smooth_repeats {
-        //     field.smooth();
-        // }
-
-        field
     }
 
     /// Randomly fill field. k - probability of empty space
@@ -95,6 +100,53 @@ impl Field {
             self.data[y][0] = FieldCell::Wall;
             self.data[y][self.width - 1] = FieldCell::Wall;
         }
+    }
+
+    fn count_neighbour_walls(&self, x: usize, y: usize) -> u32 {
+        let mut n = 0;
+
+        for row in &self.data[y - 1..=y + 1] {
+            for cell in &row[x - 1..=x + 1] {
+                n += match cell {
+                    FieldCell::Wall => 1,
+                    _ => 0,
+                }
+            }
+        }
+
+        n
+    }
+
+    /// Smooth field walls, so they look less random
+    fn smooth(&mut self) {
+        let mut new_data = self.data.clone();
+
+        for y in 1..self.height - 1 {
+            let row = &self.data[y];
+            let new_row = &mut new_data[y];
+
+            for x in 1..self.width - 1 {
+                let n_walls = self.count_neighbour_walls(x, y);
+
+                new_row[x] = row[x].smoothed(n_walls);
+            }
+        }
+
+        self.data = new_data;
+    }
+
+    /// Create cave field
+    pub fn cave(width: usize, height: usize, prob_empty_cell: f32, smooth_repeats: usize) -> Field {
+        let mut field = Field::new(width, height);
+
+        field.fill_rand(prob_empty_cell);
+        field.set_borders();
+
+        for _ in 0..smooth_repeats {
+            field.smooth();
+        }
+
+        field
     }
 
     /// Prints to contex all cells in field
