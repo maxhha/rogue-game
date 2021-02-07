@@ -641,7 +641,7 @@ fn game() -> bool {
                 match c {
                     Key::Char('q') => break,
                     Key::Char('r') => break,
-                    _ => ()
+                    _ => (),
                 }
             }
         }
@@ -847,7 +847,7 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
                             Key::Char('r') => {
                                 restart = true;
                                 break 'main;
-                            },
+                            }
                             _ => (),
                         },
                         Err(TryRecvError::Empty) => break,
@@ -866,13 +866,40 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
     restart
 }
 
-fn main() {
-    loop {
-        if !game() {
-            break
-        }
+use bracket_terminal::prelude::*;
+
+struct State {}
+
+impl GameState for State {
+    fn tick(&mut self, ctx: &mut BTerm) {
+        ctx.print(1, 1, "Hello Bracket World");
     }
 }
+
+bracket_terminal::embedded_resource!(TILE_FONT, "../resources/vga8x16.png");
+
+fn main() -> BError {
+    bracket_terminal::link_resource!(TILE_FONT, "resources/vga8x16.png");
+
+    let context = BTermBuilder::new()
+        .with_dimensions(80, 25)
+        .with_tile_dimensions(12, 24)
+        .with_title("Colorful Font with Alpha")
+        .with_font("vga8x16.png", 8, 16)
+        .with_simple_console(80, 25, "vga8x16.png")
+        .build()?;
+
+    let gs: State = State {};
+    main_loop(context, gs)
+}
+
+// fn main() {
+//     loop {
+//         if !game() {
+//             break;
+//         }
+//     }
+// }
 
 fn sleep(millis: u64) {
     if millis == 0 {
