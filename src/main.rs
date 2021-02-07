@@ -866,15 +866,9 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
     restart
 }
 
+mod state;
+use crate::state::State;
 use bracket_terminal::prelude::*;
-
-struct State {}
-
-impl GameState for State {
-    fn tick(&mut self, ctx: &mut BTerm) {
-        ctx.print(1, 1, "Hello Bracket World");
-    }
-}
 
 bracket_terminal::embedded_resource!(TILE_FONT, "../resources/vga8x16.png");
 
@@ -889,7 +883,7 @@ fn main() -> BError {
         .with_simple_console(80, 25, "vga8x16.png")
         .build()?;
 
-    let gs: State = State {};
+    let gs = State::default();
     main_loop(context, gs)
 }
 
