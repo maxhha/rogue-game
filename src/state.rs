@@ -7,9 +7,10 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
-        State {
-            field: Field::cave(80, 25, 0.6, 1),
-        }
+        let mut field = Field::cave(40, 25, 0.6, 1);
+        field.scale(2, 1);
+
+        State { field }
     }
 }
 

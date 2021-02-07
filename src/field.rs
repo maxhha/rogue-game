@@ -22,7 +22,7 @@ const COLOR_BG: RGBA = RGBA {
     a: 0.0,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 enum FieldCell {
     Empty,
     Wall,
@@ -147,6 +147,36 @@ impl Field {
         }
 
         field
+    }
+
+    fn set_rect(&mut self, val: FieldCell, x1: usize, y1: usize, x2: usize, y2: usize) {
+        for y in y1..y2 {
+            let row = &mut self.data[y];
+
+            for cell in &mut row[x1..x2] {
+                *cell = val;
+            }
+        }
+    }
+
+    /// Scale field
+    pub fn scale(&mut self, x_scale: usize, y_scale: usize) {
+        let mut new_field = Field::new(self.width * x_scale, self.height * y_scale);
+
+        for y in 0..self.height {
+            let row = &self.data[y];
+            for x in 0..self.width {
+                new_field.set_rect(
+                    row[x],
+                    x * x_scale,
+                    y * y_scale,
+                    (x + 1) * x_scale,
+                    (y + 1) * y_scale,
+                )
+            }
+        }
+
+        *self = new_field
     }
 
     /// Prints to contex all cells in field
