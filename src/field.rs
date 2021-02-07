@@ -1,5 +1,7 @@
+use bracket_pathfinding::prelude::*;
 use bracket_terminal::prelude::{BTerm, RGBA};
 use rand::Rng;
+use std::collections::HashSet;
 
 const COLOR_WALL: RGBA = RGBA {
     r: 0.5333,
@@ -186,5 +188,43 @@ impl Field {
                 self.data[y][x].render(ctx, x as i32, y as i32);
             }
         }
+    }
+
+    pub fn is_wall(&self, x: i32, y: i32) -> bool {
+        if x < 0 || y < 0 {
+            return true;
+        }
+
+        let x = x as usize;
+        let y = y as usize;
+
+        if x >= self.width || y >= self.height {
+            return true;
+        }
+
+        match self.data[y as usize][x as usize] {
+            FieldCell::Wall => true,
+            FieldCell::Empty => false,
+        }
+    }
+
+    pub fn render_with_fov(&self, ctx: &mut BTerm, fov: &HashSet<Point>) {
+        for idx in fov {
+            self.data[idx.y as usize][idx.x as usize].render(ctx, idx.x, idx.y);
+        }
+    }
+}
+
+impl Algorithm2D for Field {
+    fn dimensions(&self) -> Point {
+        Point::new(self.width, self.height)
+    }
+}
+
+impl BaseMap for Field {
+    fn is_opaque(&self, idx: usize) -> bool {
+        let x = idx % self.width;
+        let y = idx / self.width;
+        self.is_wall(x as i32, y as i32)
     }
 }
