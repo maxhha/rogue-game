@@ -109,9 +109,8 @@ impl Field {
 
         for row in &self.data[y - 1..=y + 1] {
             for cell in &row[x - 1..=x + 1] {
-                n += match cell {
-                    FieldCell::Wall => 1,
-                    _ => 0,
+                if let FieldCell::Wall = cell {
+                    n += 1;
                 }
             }
         }
