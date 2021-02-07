@@ -866,6 +866,7 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
     restart
 }
 
+mod field;
 mod state;
 use crate::state::State;
 use bracket_terminal::prelude::*;
@@ -887,7 +888,7 @@ fn build_context() -> Result<BTerm, Box<dyn std::error::Error + Send + Sync>> {
 fn main() -> BError {
     let context = build_context()?;
 
-    let gs = State::default();
+    let gs = State::new();
     main_loop(context, gs)
 }
 
