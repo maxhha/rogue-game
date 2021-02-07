@@ -8,7 +8,7 @@ pub struct State {
 impl State {
     pub fn new() -> Self {
         State {
-            field: Field::new(80, 25),
+            field: Field::cave(80, 25, 0.6, 1),
         }
     }
 }

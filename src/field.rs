@@ -1,4 +1,5 @@
 use bracket_terminal::prelude::{BTerm, RGBA};
+use rand::Rng;
 
 const COLOR_WALL: RGBA = RGBA {
     r: 0.5333,
@@ -30,7 +31,8 @@ enum FieldCell {
 impl FieldCell {
     fn render(&self, ctx: &mut BTerm, x: i32, y: i32) {
         match self {
-            _ => ctx.print_color(x, y, COLOR_EMPTY, COLOR_BG, "."),
+            Self::Empty => ctx.print_color(x, y, COLOR_EMPTY, COLOR_BG, "."),
+            Self::Wall => ctx.print_color(x, y, COLOR_WALL, COLOR_BG, "█"),
         }
     }
 }
@@ -51,6 +53,35 @@ impl Field {
                 .into_iter()
                 .map(|_| std::iter::repeat(FieldCell::Empty).take(width).collect())
                 .collect(),
+        }
+    }
+
+    /// Create cave field
+    pub fn cave(width: usize, height: usize, prob_empty_cell: f32, smooth_repeats: usize) -> Field {
+        let mut field = Field::new(width, height);
+
+        field.fill_rand(prob_empty_cell);
+        // field.set_bounds();
+
+        // for _ in 0..smooth_repeats {
+        //     field.smooth();
+        // }
+
+        field
+    }
+
+    /// Randomly fill field. k - probability of empty space
+    fn fill_rand(&mut self, k: f32) {
+        let mut rng = rand::thread_rng();
+
+        for row in self.data.iter_mut() {
+            for cell in row.iter_mut() {
+                *cell = if rng.gen::<f32>() > k {
+                    FieldCell::Wall
+                } else {
+                    FieldCell::Empty
+                };
+            }
         }
     }
 
