@@ -872,16 +872,20 @@ use bracket_terminal::prelude::*;
 
 bracket_terminal::embedded_resource!(TILE_FONT, "../resources/vga8x16.png");
 
-fn main() -> BError {
+fn build_context() -> Result<BTerm, Box<dyn std::error::Error + Send + Sync>> {
     bracket_terminal::link_resource!(TILE_FONT, "resources/vga8x16.png");
 
-    let context = BTermBuilder::new()
+    BTermBuilder::new()
         .with_dimensions(80, 25)
         .with_tile_dimensions(12, 24)
-        .with_title("Colorful Font with Alpha")
+        .with_title("Rogue game")
         .with_font("vga8x16.png", 8, 16)
         .with_simple_console(80, 25, "vga8x16.png")
-        .build()?;
+        .build()
+}
+
+fn main() -> BError {
+    let context = build_context()?;
 
     let gs = State::default();
     main_loop(context, gs)
