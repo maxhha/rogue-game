@@ -61,7 +61,7 @@ impl Field {
         let mut field = Field::new(width, height);
 
         field.fill_rand(prob_empty_cell);
-        // field.set_bounds();
+        field.set_borders();
 
         // for _ in 0..smooth_repeats {
         //     field.smooth();
@@ -82,6 +82,18 @@ impl Field {
                     FieldCell::Empty
                 };
             }
+        }
+    }
+
+    /// Set walls at the borders of a field
+    fn set_borders(&mut self) {
+        for x in 0..self.width {
+            self.data[0][x] = FieldCell::Wall;
+            self.data[self.height - 1][x] = FieldCell::Wall;
+        }
+        for y in 1..self.height - 1 {
+            self.data[y][0] = FieldCell::Wall;
+            self.data[y][self.width - 1] = FieldCell::Wall;
         }
     }
 
