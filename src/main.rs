@@ -866,6 +866,7 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
     restart
 }
 
+mod draw;
 mod field;
 mod state;
 use crate::state::State;

@@ -1,3 +1,4 @@
+use crate::draw::{Draw, DrawWithFov, Fov};
 use bracket_pathfinding::prelude::*;
 use bracket_terminal::prelude::{BTerm, RGBA};
 use rand::Rng;
@@ -31,13 +32,6 @@ enum FieldCell {
 }
 
 impl FieldCell {
-    fn render(&self, ctx: &mut BTerm, x: i32, y: i32) {
-        match self {
-            Self::Empty => ctx.print_color(x, y, COLOR_EMPTY, COLOR_BG, "."),
-            Self::Wall => ctx.print_color(x, y, COLOR_WALL, COLOR_BG, "█"),
-        }
-    }
-
     fn smoothed(&self, n_neighbour_walls: u32) -> Self {
         match self {
             Self::Empty => {
@@ -54,6 +48,15 @@ impl FieldCell {
                     Self::Empty
                 }
             }
+        }
+    }
+}
+
+impl Draw for FieldCell {
+    fn draw(&self, ctx: &mut BTerm, pos: Point) {
+        match self {
+            Self::Empty => ctx.print_color(pos.x, pos.y, COLOR_EMPTY, COLOR_BG, "."),
+            Self::Wall => ctx.print_color(pos.x, pos.y, COLOR_WALL, COLOR_BG, "█"),
         }
     }
 }
@@ -154,7 +157,7 @@ impl Field {
     pub fn render_all(&self, ctx: &mut BTerm) {
         for y in 0..self.height {
             for x in 0..self.width {
-                self.data[y][x].render(ctx, x as i32, y as i32);
+                self.data[y][x].draw(ctx, Point::new(x, y));
             }
         }
     }
@@ -178,8 +181,10 @@ impl Field {
     }
 
     pub fn render_with_fov(&self, ctx: &mut BTerm, fov: &HashSet<Point>) {
-        for idx in fov {
-            self.data[idx.y as usize][idx.x as usize].render(ctx, idx.x, idx.y);
+        for p in fov {
+            let x = p.x as usize;
+            let y = p.y as usize;
+            self.data[y][x].draw(ctx, *p);
         }
     }
 }
