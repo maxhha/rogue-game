@@ -153,15 +153,6 @@ impl Field {
         field
     }
 
-    /// Prints to contex all cells in field
-    pub fn render_all(&self, ctx: &mut BTerm) {
-        for y in 0..self.height {
-            for x in 0..self.width {
-                self.data[y][x].draw(ctx, Point::new(x, y));
-            }
-        }
-    }
-
     pub fn is_wall(&self, x: i32, y: i32) -> bool {
         if x < 0 || y < 0 {
             return true;
@@ -179,12 +170,36 @@ impl Field {
             FieldCell::Empty => false,
         }
     }
+}
 
-    pub fn render_with_fov(&self, ctx: &mut BTerm, fov: &HashSet<Point>) {
+impl Draw for Field {
+    /// Prints to contex all cells in field
+    fn draw(&self, ctx: &mut BTerm, base: Point) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                self.data[y][x].draw(ctx, Point::new(x, y) + base);
+            }
+        }
+    }
+}
+
+impl DrawWithFov for Field {
+    fn draw_with_fov(&self, ctx: &mut BTerm, fov: &Fov, pos: Point, fov_pos: Point) {
         for p in fov {
+            let p = *p - fov_pos;
+
+            if p.x < 0 || p.y < 0 {
+                continue;
+            }
+
             let x = p.x as usize;
             let y = p.y as usize;
-            self.data[y][x].draw(ctx, *p);
+
+            if x >= self.width || y >= self.height {
+                continue;
+            }
+
+            self.data[y][x].draw(ctx, p + pos);
         }
     }
 }

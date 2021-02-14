@@ -1,3 +1,4 @@
+use crate::draw::DrawWithFov;
 use crate::field::Field;
 use bracket_pathfinding::prelude::*;
 use bracket_terminal::prelude::{BTerm, GameState};
@@ -22,6 +23,7 @@ impl GameState for State {
     fn tick(&mut self, ctx: &mut BTerm) {
         ctx.cls();
 
-        self.field.render_with_fov(ctx, &self.fov);
+        self.field
+            .draw_with_fov(ctx, &self.fov, Point::zero(), Point::zero());
     }
 }
