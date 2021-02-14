@@ -10,7 +10,7 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
-        let mut field = Field::cave(80, 25, 0.6, 1);
+        let field = Field::cave(80, 25, 0.6, 1);
 
         let fov = field_of_view_set(Point::new(40, 12), 8, &field);
 
