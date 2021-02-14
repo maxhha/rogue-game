@@ -866,6 +866,7 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
     restart
 }
 
+mod colors;
 mod draw;
 mod field;
 mod state;

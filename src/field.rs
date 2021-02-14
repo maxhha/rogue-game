@@ -1,29 +1,8 @@
+use crate::colors::{COLOR_BG, COLOR_EMPTY, COLOR_WALL};
 use crate::draw::{Draw, DrawWithFov, Fov};
 use bracket_pathfinding::prelude::*;
-use bracket_terminal::prelude::{BTerm, RGBA};
+use bracket_terminal::prelude::BTerm;
 use rand::Rng;
-use std::collections::HashSet;
-
-const COLOR_WALL: RGBA = RGBA {
-    r: 0.5333,
-    g: 0.4,
-    b: 0.5333,
-    a: 1.0,
-};
-
-const COLOR_EMPTY: RGBA = RGBA {
-    r: 0.5,
-    g: 0.5,
-    b: 0.5,
-    a: 1.0,
-};
-
-const COLOR_BG: RGBA = RGBA {
-    r: 0.0,
-    g: 0.0,
-    b: 0.0,
-    a: 0.0,
-};
 
 #[derive(Clone, Copy)]
 enum FieldCell {
@@ -216,4 +195,8 @@ impl BaseMap for Field {
         let y = idx / self.width;
         self.is_wall(x as i32, y as i32)
     }
+}
+
+trait FieldPosition {
+    fn pos(&self) -> Point;
 }
