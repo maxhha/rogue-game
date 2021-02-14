@@ -1,5 +1,5 @@
-use bracket_pathfinding::prelude::Point;
-use bracket_terminal::prelude::BTerm;
+pub use bracket_pathfinding::prelude::Point;
+pub use bracket_terminal::prelude::BTerm;
 use std::collections::HashSet;
 
 pub type Fov = HashSet<Point>;

@@ -869,6 +869,7 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
 mod colors;
 mod draw;
 mod field;
+mod player;
 mod state;
 use crate::state::State;
 use bracket_terminal::prelude::*;

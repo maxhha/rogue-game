@@ -197,6 +197,6 @@ impl BaseMap for Field {
     }
 }
 
-trait FieldPosition {
+pub trait FieldPosition {
     fn pos(&self) -> Point;
 }
