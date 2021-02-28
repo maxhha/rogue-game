@@ -4,7 +4,7 @@ use crate::field::FieldPosition;
 use crate::state::{State, Stepper, StepperStatus};
 use bracket_terminal::prelude::VirtualKeyCode;
 
-const MOVE_CLOCK: f64 = 1.0;
+const MOVE_TIME: f64 = 1.0;
 
 pub struct Player {
     pos: Point,
@@ -24,9 +24,12 @@ impl Player {
     fn action(&mut self, world: &State, direction: (i32, i32)) -> StepperStatus {
         let next_pos = self.pos + Point::from(direction);
 
-        if !world.field.is_wall(next_pos.x, next_pos.y) {
-            self.pos = next_pos;
+        if world.field.is_wall(next_pos.x, next_pos.y) {
+            return StepperStatus::Pending;
         }
+
+        self.pos = next_pos;
+        self.clock += MOVE_TIME;
 
         StepperStatus::Finished
     }
