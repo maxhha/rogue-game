@@ -1,7 +1,7 @@
 use crate::colors::{COLOR_BG, COLOR_PLAYER};
 use crate::draw::{BTerm, Draw, Point};
 use crate::field::FieldPosition;
-use crate::state::{State, Stepper};
+use crate::state::{State, Stepper, StepperStatus};
 use bracket_terminal::prelude::VirtualKeyCode;
 
 const MOVE_CLOCK: f64 = 1.0;
@@ -21,21 +21,23 @@ impl Player {
         }
     }
 
-    fn action(&mut self, world: &State, direction: (i32, i32)) {
+    fn action(&mut self, world: &State, direction: (i32, i32)) -> StepperStatus {
         let next_pos = self.pos + Point::from(direction);
 
         if !world.field.is_wall(next_pos.x, next_pos.y) {
-            self.pos = next_pos
+            self.pos = next_pos;
         }
+
+        StepperStatus::Finished
     }
 
-    fn process_key(&mut self, world: &State, key: VirtualKeyCode) {
+    fn process_key(&mut self, world: &State, key: VirtualKeyCode) -> StepperStatus {
         match key {
             VirtualKeyCode::W => self.action(world, (0, -1)),
             VirtualKeyCode::A => self.action(world, (-1, 0)),
             VirtualKeyCode::S => self.action(world, (0, 1)),
             VirtualKeyCode::D => self.action(world, (1, 0)),
-            _ => {}
+            _ => StepperStatus::Pending,
         }
     }
 }
@@ -57,9 +59,9 @@ impl Stepper for Player {
         self.clock
     }
 
-    fn process(&mut self, world: &State, ctx: &BTerm) {
+    fn process(&mut self, world: &State, ctx: &BTerm) -> StepperStatus {
         match ctx.key {
-            None => {}
+            None => StepperStatus::Finished,
             Some(key) => self.process_key(world, key),
         }
     }

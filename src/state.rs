@@ -8,6 +8,16 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
+pub enum StepperStatus {
+    Finished,
+    Pending,
+}
+
+pub trait Stepper {
+    fn clock(&self) -> f64;
+    fn process(&mut self, world: &State, ctx: &BTerm) -> StepperStatus;
+}
+
 pub struct State {
     pub field: Field,
     fov: HashSet<Point>,
@@ -38,6 +48,17 @@ impl State {
         self.fov = field_of_view_set(pos, player.view_radius, &self.field);
         self.prev_player_pos = pos;
     }
+
+    fn process_stepper(&mut self, ctx: &mut BTerm) {
+        let status = match &self.current_stepper {
+            Some(stepper) => stepper.borrow_mut().process(&self, ctx),
+            _ => StepperStatus::Finished,
+        };
+
+        if let StepperStatus::Finished = status {
+            self.current_stepper = None;
+        }
+    }
 }
 
 impl GameState for State {
@@ -49,9 +70,7 @@ impl GameState for State {
             self.current_stepper = Some(stepper)
         }
 
-        if let Some(stepper) = &self.current_stepper {
-            stepper.borrow_mut().process(&self, ctx);
-        }
+        self.process_stepper(ctx);
 
         if self.prev_player_pos != self.player.borrow().pos() {
             self.update_fov();
@@ -62,9 +81,4 @@ impl GameState for State {
 
         self.player.borrow().draw(ctx, self.player.borrow().pos());
     }
-}
-
-pub trait Stepper {
-    fn clock(&self) -> f64;
-    fn process(&mut self, world: &State, ctx: &BTerm);
 }
