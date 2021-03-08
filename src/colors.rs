@@ -27,3 +27,10 @@ pub const COLOR_PLAYER: RGBA = RGBA {
     b: 1.0,
     a: 1.0,
 };
+
+pub const COLOR_RAT: RGBA = RGBA {
+    r: 0.4,
+    g: 0.4,
+    b: 0.4667,
+    a: 1.0,
+};

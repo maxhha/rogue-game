@@ -1,4 +1,5 @@
 use crate::draw::{Draw, DrawWithFov};
+use crate::enemy::{Enemy, Rat};
 use crate::field::{Field, FieldPosition};
 use crate::player::Player;
 
@@ -23,7 +24,19 @@ pub struct State {
     fov: HashSet<Point>,
     player: Rc<RefCell<Player>>,
     prev_player_pos: Point,
+    enemies: Vec<Rc<RefCell<dyn Enemy>>>,
     current_stepper: Option<Rc<RefCell<dyn Stepper>>>,
+}
+
+fn create_enemies(empty_cells: &mut Vec<Point>) -> Vec<Rc<RefCell<dyn Enemy>>> {
+    (0..25)
+        .into_iter()
+        .map(|_| {
+            let i = rand::random::<usize>() % empty_cells.len();
+            let pos = empty_cells.remove(i);
+            Rc::new(RefCell::new(Rat::new(pos))) as Rc<RefCell<dyn Enemy>>
+        })
+        .collect()
 }
 
 impl State {
@@ -32,9 +45,15 @@ impl State {
         let player = Player::new(Point::new(40, 12), 8);
         let fov = field_of_view_set(player.pos(), player.view_radius, &field);
 
+        let mut empty_cells = field.empty_cells();
+        empty_cells.retain(|&x| x != player.pos());
+
+        let enemies = create_enemies(&mut empty_cells);
+
         State {
             field,
             fov,
+            enemies,
             current_stepper: None,
             prev_player_pos: player.pos(),
             player: Rc::new(RefCell::new(player)),
@@ -78,6 +97,11 @@ impl GameState for State {
 
         self.field
             .draw_with_fov(ctx, &self.fov, Point::zero(), Point::zero());
+
+        for enemy in &self.enemies {
+            let enemy = enemy.borrow();
+            enemy.draw_with_fov(ctx, &self.fov, enemy.pos(), enemy.pos());
+        }
 
         self.player.borrow().draw(ctx, self.player.borrow().pos());
     }

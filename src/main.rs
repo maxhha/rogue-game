@@ -868,6 +868,7 @@ $R@i.~~ !     :   ~$$$$$B$$en:``\r
 
 mod colors;
 mod draw;
+mod enemy;
 mod field;
 mod player;
 mod state;
