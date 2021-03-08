@@ -149,6 +149,20 @@ impl Field {
             FieldCell::Empty => false,
         }
     }
+
+    pub fn empty_cells(&self) -> Vec<Point> {
+        let mut list = Vec::new();
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if let FieldCell::Empty = self.data[y][x] {
+                    list.push(Point::new(x as i32, y as i32))
+                }
+            }
+        }
+
+        list
+    }
 }
 
 impl Draw for Field {
