@@ -22,9 +22,9 @@ pub trait Stepper {
 pub struct State {
     pub field: Field,
     fov: HashSet<Point>,
-    player: Rc<RefCell<Player>>,
+    pub player: Rc<RefCell<Player>>,
     prev_player_pos: Point,
-    enemies: Vec<Rc<RefCell<dyn Enemy>>>,
+    pub enemies: Vec<Rc<RefCell<dyn Enemy>>>,
     current_stepper: Option<Rc<RefCell<dyn Stepper>>>,
 }
 

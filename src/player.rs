@@ -28,6 +28,16 @@ impl Player {
             return StepperStatus::Pending;
         }
 
+        let enemy = world
+            .enemies
+            .iter()
+            .filter(|x| x.borrow().pos() == next_pos)
+            .next();
+
+        if let Some(_) = enemy {
+            return StepperStatus::Pending;
+        }
+
         self.pos = next_pos;
         self.clock += MOVE_TIME;
 
