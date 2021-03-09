@@ -28,12 +28,15 @@ pub struct State {
     current_stepper: Option<Rc<RefCell<dyn Stepper>>>,
 }
 
+fn remove_random<E>(v: &mut Vec<E>) -> E {
+    v.remove(rand::random::<usize>() % v.len())
+}
+
 fn create_enemies(empty_cells: &mut Vec<Point>) -> Vec<Rc<RefCell<dyn Enemy>>> {
     (0..25)
         .into_iter()
         .map(|_| {
-            let i = rand::random::<usize>() % empty_cells.len();
-            let pos = empty_cells.remove(i);
+            let pos = remove_random(empty_cells);
             Rc::new(RefCell::new(Rat::new(pos))) as Rc<RefCell<dyn Enemy>>
         })
         .collect()
@@ -42,11 +45,10 @@ fn create_enemies(empty_cells: &mut Vec<Point>) -> Vec<Rc<RefCell<dyn Enemy>>> {
 impl State {
     pub fn new() -> Self {
         let field = Field::cave(80, 25, 0.6, 1);
-        let player = Player::new(Point::new(40, 12), 8);
-        let fov = field_of_view_set(player.pos(), player.view_radius, &field);
-
         let mut empty_cells = field.empty_cells();
-        empty_cells.retain(|&x| x != player.pos());
+
+        let player = Player::new(remove_random(&mut empty_cells), 8);
+        let fov = field_of_view_set(player.pos(), player.view_radius, &field);
 
         let enemies = create_enemies(&mut empty_cells);
 
