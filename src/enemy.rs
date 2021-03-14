@@ -4,7 +4,7 @@ use crate::field::FieldPosition;
 use crate::state::{State, Stepper, StepperStatus};
 
 pub struct Enemy {
-    draw_char: &'static str,
+    draw_char: char,
     draw_color: RGBA,
     action_time: f64,
     pos: Point,
@@ -12,7 +12,7 @@ pub struct Enemy {
 }
 
 pub struct EnemyBuilder {
-    draw_char: &'static str,
+    draw_char: char,
     draw_color: RGBA,
     pos: Point,
     action_time: f64,
@@ -21,7 +21,7 @@ pub struct EnemyBuilder {
 impl EnemyBuilder {
     pub fn rat() -> Self {
         Self {
-            draw_char: "r",
+            draw_char: 'r',
             draw_color: COLOR_RAT,
             pos: Point::zero(),
             action_time: 0.5,
