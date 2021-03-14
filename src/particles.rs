@@ -1,4 +1,4 @@
-use crate::colors::{COLOR_BG, COLOR_BLOOD, COLOR_PLAYER};
+use crate::colors::{COLOR_BG, COLOR_BLOOD};
 use crate::draw::{BTerm, Draw, Point};
 use rand::Rng;
 use std::time::{Duration, Instant};
