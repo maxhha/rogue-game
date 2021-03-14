@@ -1,4 +1,4 @@
-use bracket_terminal::prelude::RGBA;
+pub use bracket_terminal::prelude::RGBA;
 
 pub const COLOR_WALL: RGBA = RGBA {
     r: 0.5333,

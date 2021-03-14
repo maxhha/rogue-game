@@ -1,5 +1,5 @@
 use crate::draw::{Draw, DrawWithFov};
-use crate::enemy::{Enemy, Rat};
+use crate::enemy::{Enemy, EnemyBuilder};
 use crate::field::{Field, FieldPosition};
 use crate::player::Player;
 
@@ -24,7 +24,7 @@ pub struct State {
     fov: HashSet<Point>,
     pub player: Rc<RefCell<Player>>,
     prev_player_pos: Point,
-    pub enemies: Vec<Rc<RefCell<dyn Enemy>>>,
+    pub enemies: Vec<Rc<RefCell<Enemy>>>,
     current_stepper: Option<Rc<RefCell<dyn Stepper>>>,
 }
 
@@ -32,12 +32,13 @@ fn remove_random<E>(v: &mut Vec<E>) -> E {
     v.remove(rand::random::<usize>() % v.len())
 }
 
-fn create_enemies(empty_cells: &mut Vec<Point>) -> Vec<Rc<RefCell<dyn Enemy>>> {
+fn create_enemies(empty_cells: &mut Vec<Point>) -> Vec<Rc<RefCell<Enemy>>> {
     (0..25)
         .into_iter()
         .map(|_| {
             let pos = remove_random(empty_cells);
-            Rc::new(RefCell::new(Rat::new(pos))) as Rc<RefCell<dyn Enemy>>
+            let rat = EnemyBuilder::rat().pos(pos).build();
+            Rc::new(RefCell::new(rat))
         })
         .collect()
 }
@@ -70,7 +71,27 @@ impl State {
         self.prev_player_pos = pos;
     }
 
+    fn next_stepper(&self) -> Option<Rc<RefCell<dyn Stepper>>> {
+        let mut stepper = Rc::clone(&self.player) as Rc<RefCell<dyn Stepper>>;
+        let mut min_clock = stepper.borrow().clock();
+
+        for enemy in &self.enemies {
+            let clock = enemy.borrow().clock();
+
+            if clock < min_clock {
+                min_clock = clock;
+                stepper = enemy.clone() as Rc<RefCell<dyn Stepper>>;
+            }
+        }
+
+        Some(stepper)
+    }
+
     fn process_stepper(&mut self, ctx: &mut BTerm) {
+        if let None = self.current_stepper {
+            self.current_stepper = self.next_stepper();
+        }
+
         let status = match &self.current_stepper {
             Some(stepper) => stepper.borrow_mut().process(&self, ctx),
             _ => StepperStatus::Finished,
@@ -85,11 +106,6 @@ impl State {
 impl GameState for State {
     fn tick(&mut self, ctx: &mut BTerm) {
         ctx.cls();
-
-        if let None = self.current_stepper {
-            let stepper = Rc::clone(&self.player);
-            self.current_stepper = Some(stepper)
-        }
 
         self.process_stepper(ctx);
 
