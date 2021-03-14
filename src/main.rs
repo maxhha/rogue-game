@@ -870,6 +870,7 @@ mod colors;
 mod draw;
 mod enemy;
 mod field;
+mod particles;
 mod player;
 mod state;
 use crate::state::State;

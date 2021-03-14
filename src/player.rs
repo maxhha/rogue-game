@@ -35,7 +35,14 @@ impl Player {
             .next();
 
         if let Some(_) = enemy {
-            return StepperStatus::Pending;
+            world.blood_effect.borrow_mut().spawn(
+                next_pos,
+                (direction.0 as f64, direction.1 as f64),
+                2,
+                0.6,
+            );
+
+            return StepperStatus::Finished;
         }
 
         self.pos = next_pos;

@@ -1,6 +1,7 @@
 use crate::draw::{Draw, DrawWithFov};
 use crate::enemy::{Enemy, EnemyBuilder};
 use crate::field::{Field, FieldPosition};
+use crate::particles::BloodParticlesEffect;
 use crate::player::Player;
 
 use bracket_pathfinding::prelude::*;
@@ -26,6 +27,7 @@ pub struct State {
     prev_player_pos: Point,
     pub enemies: Vec<Rc<RefCell<Enemy>>>,
     current_stepper: Option<Rc<RefCell<dyn Stepper>>>,
+    pub blood_effect: RefCell<BloodParticlesEffect>,
 }
 
 fn remove_random<E>(v: &mut Vec<E>) -> E {
@@ -53,6 +55,8 @@ impl State {
 
         let enemies = create_enemies(&mut empty_cells);
 
+        let blood_effect = BloodParticlesEffect::new();
+
         State {
             field,
             fov,
@@ -60,6 +64,7 @@ impl State {
             current_stepper: None,
             prev_player_pos: player.pos(),
             player: Rc::new(RefCell::new(player)),
+            blood_effect: RefCell::new(blood_effect),
         }
     }
 
@@ -107,6 +112,7 @@ impl GameState for State {
     fn tick(&mut self, ctx: &mut BTerm) {
         ctx.cls();
 
+        self.blood_effect.borrow_mut().process();
         self.process_stepper(ctx);
 
         if self.prev_player_pos != self.player.borrow().pos() {
@@ -122,5 +128,6 @@ impl GameState for State {
         }
 
         self.player.borrow().draw(ctx, self.player.borrow().pos());
+        self.blood_effect.borrow().draw(ctx, Point::zero());
     }
 }

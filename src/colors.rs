@@ -34,3 +34,10 @@ pub const COLOR_RAT: RGBA = RGBA {
     b: 0.4667,
     a: 1.0,
 };
+
+pub const COLOR_BLOOD: RGBA = RGBA {
+    r: 0.9333,
+    g: 0.2,
+    b: 0.2,
+    a: 1.0,
+};
