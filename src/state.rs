@@ -21,6 +21,8 @@ pub trait Stepper {
 }
 
 pub struct State {
+    screen_width: u64,
+    screen_height: u64,
     pub field: Field,
     fov: HashSet<Point>,
     pub player: Rc<RefCell<Player>>,
@@ -46,7 +48,7 @@ fn create_enemies(empty_cells: &mut Vec<Point>) -> Vec<Rc<RefCell<Enemy>>> {
 }
 
 impl State {
-    pub fn new() -> Self {
+    pub fn new(screen_width: u64, screen_height: u64) -> Self {
         let field = Field::cave(80, 25, 0.6, 1);
         let mut empty_cells = field.empty_cells();
 
@@ -58,6 +60,8 @@ impl State {
         let blood_effect = BloodParticlesEffect::new();
 
         State {
+            screen_width,
+            screen_height,
             field,
             fov,
             enemies,

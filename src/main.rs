@@ -878,22 +878,28 @@ use bracket_terminal::prelude::*;
 
 bracket_terminal::embedded_resource!(TILE_FONT, "../resources/vga8x16.png");
 
-fn build_context() -> Result<BTerm, Box<dyn std::error::Error + Send + Sync>> {
+const CONSOLE_WIDTH: u64 = 80;
+const CONSOLE_HEIGHT: u64 = 25;
+
+fn build_context(
+    width: u64,
+    height: u64,
+) -> Result<BTerm, Box<dyn std::error::Error + Send + Sync>> {
     bracket_terminal::link_resource!(TILE_FONT, "resources/vga8x16.png");
 
     BTermBuilder::new()
-        .with_dimensions(80, 25)
+        .with_dimensions(width, height)
         .with_tile_dimensions(12, 24)
         .with_title("Rogue game")
         .with_font("vga8x16.png", 8, 16)
-        .with_simple_console(80, 25, "vga8x16.png")
+        .with_simple_console(width, height, "vga8x16.png")
         .build()
 }
 
 fn main() -> BError {
-    let context = build_context()?;
+    let context = build_context(CONSOLE_WIDTH, CONSOLE_HEIGHT)?;
 
-    let gs = State::new();
+    let gs = State::new(CONSOLE_WIDTH, CONSOLE_HEIGHT);
     main_loop(context, gs)
 }
 
