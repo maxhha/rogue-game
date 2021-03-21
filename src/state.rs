@@ -110,6 +110,20 @@ impl State {
             self.current_stepper = None;
         }
     }
+
+    fn is_player_current_stepper(&self) -> bool {
+        match &self.current_stepper {
+            Some(stepper) => {
+                let player = self.player.clone() as Rc<RefCell<dyn Stepper>>;
+                Rc::ptr_eq(stepper, &player)
+            }
+            None => false,
+        }
+    }
+
+    fn draw_wait(&self, ctx: &mut BTerm) {
+        ctx.print_centered(self.screen_height - 2, "[wait]")
+    }
 }
 
 impl GameState for State {
@@ -133,5 +147,9 @@ impl GameState for State {
 
         self.player.borrow().draw(ctx, self.player.borrow().pos());
         self.blood_effect.borrow().draw(ctx, Point::zero());
+
+        if !self.is_player_current_stepper() {
+            self.draw_wait(ctx)
+        }
     }
 }

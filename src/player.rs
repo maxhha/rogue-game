@@ -42,6 +42,8 @@ impl Player {
                 0.6,
             );
 
+            self.clock += MOVE_TIME;
+
             return StepperStatus::Finished;
         }
 
@@ -81,7 +83,7 @@ impl Stepper for Player {
 
     fn process(&mut self, world: &State, ctx: &BTerm) -> StepperStatus {
         match ctx.key {
-            None => StepperStatus::Finished,
+            None => StepperStatus::Pending,
             Some(key) => self.process_key(world, key),
         }
     }
