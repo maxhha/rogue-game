@@ -1,4 +1,4 @@
-use crate::colors::{COLOR_BG, COLOR_RAT, RGBA};
+use crate::colors::{COLOR_BG, RGBA};
 use crate::draw::{BTerm, DrawWithFov, Fov, Point};
 use crate::field::FieldPosition;
 use crate::state::{State, Stepper, StepperStatus};
@@ -11,35 +11,14 @@ pub struct Enemy {
     clock: f64,
 }
 
-pub struct EnemyBuilder {
-    draw_char: char,
-    draw_color: RGBA,
-    pos: Point,
-    action_time: f64,
-}
-
-impl EnemyBuilder {
-    pub fn rat() -> Self {
+impl Enemy {
+    pub fn new(draw_char: char, draw_color: RGBA, action_time: f64, pos: Point) -> Self {
         Self {
-            draw_char: 'r',
-            draw_color: COLOR_RAT,
-            pos: Point::zero(),
-            action_time: 0.5,
-        }
-    }
-
-    pub fn pos(mut self, pos: Point) -> Self {
-        self.pos = pos;
-        self
-    }
-
-    pub fn build(self) -> Enemy {
-        Enemy {
             clock: 0.0,
-            pos: self.pos,
-            draw_char: self.draw_char,
-            draw_color: self.draw_color,
-            action_time: self.action_time,
+            pos,
+            draw_char,
+            draw_color,
+            action_time,
         }
     }
 }
