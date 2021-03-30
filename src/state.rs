@@ -136,8 +136,8 @@ impl GameState for State {
     fn tick(&mut self, ctx: &mut BTerm) {
         ctx.cls();
 
-        self.blood_effect.borrow_mut().process();
         self.process(ctx);
+        self.blood_effect.borrow_mut().process();
         self.process_stepper(ctx);
 
         if self.prev_player_pos != self.player.borrow().pos() {
