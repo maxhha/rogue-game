@@ -5,7 +5,7 @@ use crate::particles::BloodParticlesEffect;
 use crate::player::Player;
 
 use bracket_pathfinding::prelude::*;
-use bracket_terminal::prelude::{BTerm, GameState};
+use bracket_terminal::prelude::{BTerm, GameState, VirtualKeyCode};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -96,6 +96,12 @@ impl State {
         Some(stepper)
     }
 
+    fn process(&self, ctx: &mut BTerm) {
+        if let Some(VirtualKeyCode::Q) = ctx.key {
+            ctx.quit()
+        }
+    }
+
     fn process_stepper(&mut self, ctx: &mut BTerm) {
         if let None = self.current_stepper {
             self.current_stepper = self.next_stepper();
@@ -131,6 +137,7 @@ impl GameState for State {
         ctx.cls();
 
         self.blood_effect.borrow_mut().process();
+        self.process(ctx);
         self.process_stepper(ctx);
 
         if self.prev_player_pos != self.player.borrow().pos() {
