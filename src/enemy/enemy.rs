@@ -3,12 +3,22 @@ use crate::draw::{BTerm, DrawWithFov, Fov, Point};
 use crate::field::FieldPosition;
 use crate::state::{State, Stepper, StepperStatus};
 
+const SPOT_DISTANCE: f64 = 8.0;
+const ATTACK_DISTANCE: f64 = 1.0;
+
 pub struct Enemy {
     draw_char: char,
     draw_color: RGBA,
     action_time: f64,
     pos: Point,
     clock: f64,
+    move_intent: (f64, f64),
+    staying_steps: i32,
+}
+
+fn normalize(x: f64, y: f64) -> (f64, f64) {
+    let l = (x * x + y * y).sqrt();
+    (x / l, y / l)
 }
 
 impl Enemy {
@@ -19,7 +29,52 @@ impl Enemy {
             draw_char,
             draw_color,
             action_time,
+            move_intent: (0.0, 0.0),
+            staying_steps: 0,
         }
+    }
+
+    fn wonder_intent(&self) -> f64 {
+        f64::max(
+            (2.17_f64).powf(2.0 * (self.staying_steps as f64)) - 1.0,
+            0.0,
+        )
+    }
+
+    fn follow(&mut self, target: Point) {
+        let dx = (target.x - self.pos.x) as f64;
+        let dy = (target.y - self.pos.y) as f64;
+
+        let (dx_norm, dy_norm) = normalize(dx, dy);
+
+        self.move_intent.0 += dx_norm;
+        self.move_intent.1 += dy_norm;
+    }
+
+    fn random_wondering(&mut self, intent: f64) {
+        self.move_intent.0 += intent * (rand::random::<f64>() - 0.5);
+        self.move_intent.1 += intent * (rand::random::<f64>() - 0.5);
+    }
+
+    fn action_move(&mut self, world: &State) {
+        self.move_intent = normalize(self.move_intent.0, self.move_intent.1);
+        let mut next = self.pos;
+
+        if self.move_intent.0.abs() >= self.move_intent.1.abs() {
+            next.x += self.move_intent.0.signum() as i32;
+            self.move_intent.0 -= self.move_intent.0.signum();
+        } else {
+            next.y += self.move_intent.1.signum() as i32;
+            self.move_intent.1 -= self.move_intent.1.signum();
+        }
+
+        if world.field.is_wall(next.x, next.y) {
+            self.staying_steps += 1;
+            return;
+        }
+
+        self.pos = next;
+        self.staying_steps = i32::max(self.staying_steps - 1, 0);
     }
 }
 
@@ -42,8 +97,26 @@ impl Stepper for Enemy {
         self.clock
     }
 
-    fn process(&mut self, _world: &State, _ctx: &BTerm) -> StepperStatus {
+    fn process(&mut self, world: &State, _ctx: &BTerm) -> StepperStatus {
         self.clock += self.action_time;
-        StepperStatus::Finished
+
+        let delta = world.player.borrow().pos() - self.pos;
+        let distance_squared = delta.x.pow(2) + delta.y.pow(2);
+        let distance = (distance_squared as f64).sqrt();
+
+        if distance <= ATTACK_DISTANCE {
+            StepperStatus::Finished
+        } else if distance < SPOT_DISTANCE {
+            let wonder_intent = self.wonder_intent();
+
+            self.follow(world.player.borrow().pos());
+            self.random_wondering(wonder_intent);
+
+            self.action_move(world);
+
+            StepperStatus::Finished
+        } else {
+            StepperStatus::Finished
+        }
     }
 }
