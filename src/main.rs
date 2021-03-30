@@ -10,6 +10,7 @@ use termion::raw::IntoRawMode;
 use termion::terminal_size;
 use termion::{color, style};
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 enum DrawChar {
     Empty,
@@ -17,16 +18,19 @@ enum DrawChar {
     CharColored(char, color::Rgb),
 }
 
+#[allow(dead_code)]
 #[derive(Clone)]
 enum FieldCell {
     Empty,
     Wall,
 }
 
+#[allow(dead_code)]
 struct Field {
     data: Array2<FieldCell>,
 }
 
+#[allow(dead_code)]
 impl Field {
     fn new(width: usize, height: usize) -> Field {
         Field {
@@ -203,6 +207,7 @@ struct BloodEffectPoint {
 }
 
 impl BloodEffectPoint {
+    #[allow(dead_code)]
     fn new(pos: (i32, i32), speed: (f64, f64), lifetime: i32) -> BloodEffectPoint {
         BloodEffectPoint {
             pos,
@@ -213,15 +218,18 @@ impl BloodEffectPoint {
     }
 }
 
+#[allow(dead_code)]
 struct BloodEffect {
     points: Vec<BloodEffectPoint>,
 }
 
 impl BloodEffect {
+    #[allow(dead_code)]
     fn new() -> BloodEffect {
         BloodEffect { points: Vec::new() }
     }
 
+    #[allow(dead_code)]
     fn spawn(&mut self, pos: (i32, i32), speed: (f64, f64), number: usize, power: f64) {
         let mut rng = rand::thread_rng();
 
@@ -239,6 +247,7 @@ impl BloodEffect {
         }
     }
 
+    #[allow(dead_code)]
     fn run(&mut self) {
         self.points = self
             .points
@@ -267,6 +276,7 @@ impl BloodEffect {
             .collect::<Vec<_>>();
     }
 
+    #[allow(dead_code)]
     fn get_draw_chars(&self) -> Vec<(i32, i32, DrawChar)> {
         self.points
             .iter()
@@ -293,6 +303,7 @@ impl BloodEffect {
     }
 }
 
+#[allow(dead_code)]
 fn draw(dest: &mut Array2<DrawChar>, src: &Array2<DrawChar>, pos: (usize, usize)) {
     for (p, v) in src.indexed_iter() {
         let x = p.1 + pos.0;
@@ -306,6 +317,7 @@ fn draw(dest: &mut Array2<DrawChar>, src: &Array2<DrawChar>, pos: (usize, usize)
     }
 }
 
+#[allow(dead_code)]
 fn frame(
     stdout: &mut termion::screen::AlternateScreen<termion::raw::RawTerminal<std::io::Stdout>>,
     screen: &mut Array2<DrawChar>,
@@ -386,6 +398,7 @@ fn frame(
     blood_eff.run();
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 struct UnitInfo {
     attack: f64,
@@ -394,11 +407,13 @@ struct UnitInfo {
 }
 
 impl UnitInfo {
+    #[allow(dead_code)]
     fn kill_prob(&self, enemy: &UnitInfo) -> f64 {
         self.attack * (1.0 + self.luck) / enemy.defence / (1.0 + enemy.luck)
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy)]
 struct Enemy {
     symbol: DrawChar,
@@ -412,6 +427,7 @@ struct Enemy {
 }
 
 impl Enemy {
+    #[allow(dead_code)]
     fn process(
         &mut self,
         player: &mut Player,
@@ -477,6 +493,7 @@ impl Enemy {
     }
 }
 
+#[allow(dead_code)]
 struct Player {
     pos: (i32, i32),
     step: f64,
@@ -486,6 +503,7 @@ struct Player {
     info: UnitInfo,
 }
 
+#[allow(dead_code)]
 impl Player {
     fn action(
         &mut self,
@@ -521,6 +539,7 @@ impl Player {
     }
 }
 
+#[allow(dead_code)]
 fn game() -> bool {
     let (width, height) = terminal_size().unwrap();
 
