@@ -68,13 +68,25 @@ impl Enemy {
             self.move_intent.1 -= self.move_intent.1.signum();
         }
 
-        if world.field.is_wall(next.x, next.y) {
+        if self.can_move(world, &next) {
+            self.pos = next;
+            self.staying_steps = i32::max(self.staying_steps - 1, 0);
+        } else {
             self.staying_steps += 1;
-            return;
         }
+    }
 
-        self.pos = next;
-        self.staying_steps = i32::max(self.staying_steps - 1, 0);
+    fn can_move(&self, world: &State, target: &Point) -> bool {
+        !world.field.is_wall(target.x, target.y)
+            && world
+                .enemies
+                .iter()
+                .filter(|e| match e.try_borrow() {
+                    Err(_) => false,
+                    Ok(e) => e.pos == *target,
+                })
+                .next()
+                .is_none()
     }
 }
 
